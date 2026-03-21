@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agiliz — Wizard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0C0E14;
+  --surface:   #13161E;
+  --surface-2: #1A1E28;
+  --border:    #252836;
+  --border-2:  #303548;
+  --accent:    #7C5CFC;
+  --accent-dim:#4B38A8;
+  --teal:      #10B981;
+  --teal-dim:  #065F46;
+  --red:       #EF4444;
+  --yellow:    #F59E0B;
+  --text:      #E8EAF0;
+  --text-2:    #8890A4;
+  --text-3:    #525869;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'IBM Plex Sans', sans-serif;
+  --radius:    6px;
+  --radius-lg: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-logo-text {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.sidebar-logo-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.nav-item:hover { background: var(--surface-2); color: var(--text); }
+.nav-item.active { background: rgba(124,92,252,0.15); color: var(--accent); }
+
+.nav-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-icon { opacity: 1; }
+
+.sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+
+/* ─── Main ────────────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ─── Page header ─────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.page-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+  font-family: var(--sans);
+}
+
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #9070FF; }
+.btn-ghost { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-2); }
+.btn-danger { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+.btn-teal { background: rgba(16,185,129,0.15); color: var(--teal); border: 1px solid rgba(16,185,129,0.3); }
+.btn-teal:hover:not(:disabled) { background: rgba(16,185,129,0.25); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ─── Badges ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.badge-groq   { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
+.badge-claude { background: rgba(124,92,252,0.15); color: var(--accent); border: 1px solid rgba(124,92,252,0.3); }
+.badge-flow   { background: rgba(16,185,129,0.15); color: var(--teal);   border: 1px solid rgba(16,185,129,0.3); }
+
+/* ─── Dashboard ───────────────────────────────────────────────────────────── */
+.bots-grid {
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.bot-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: border-color 0.15s;
+  position: relative;
+}
+
+.bot-card:hover { border-color: var(--border-2); }
+
+.bot-card-id {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.bot-card-id::before {
+  content: '$ ';
+  color: var(--accent);
+}
+
+.bot-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.bot-card-number {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.bot-card-flows {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.bot-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-3);
+}
+
+.empty-state-icon {
+  font-family: var(--mono);
+  font-size: 32px;
+  opacity: 0.3;
+}
+
+.empty-state p {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+/* ─── Wizard ──────────────────────────────────────────────────────────────── */
+.wizard-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px;
+}
+
+.step-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 32px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.step.active .step-num   { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.done .step-num     { background: var(--teal-dim); border-color: var(--teal); color: var(--teal); }
+
+.step-label {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.step.active .step-label { color: var(--text); font-weight: 500; }
+.step.done .step-label   { color: var(--teal); }
+
+.step-line {
+  height: 1px;
+  background: var(--border);
+  flex: 1;
+  margin: 0 8px;
+}
+
+/* ─── Form ────────────────────────────────────────────────────────────────── */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  font-family: var(--mono);
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.form-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-3); }
+
+.provider-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.provider-option {
+  flex: 1;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.provider-option:hover { border-color: var(--border-2); background: var(--surface-2); }
+.provider-option.selected { border-color: var(--accent); background: rgba(124,92,252,0.08); }
+.provider-option input { display: none; }
+
+.provider-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.provider-desc {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 600px;
+}
+
+/* ─── Chat ────────────────────────────────────────────────────────────────── */
+.chat-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  max-width: 760px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.chat-bubble.agent {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  align-self: flex-start;
+  border-radius: 4px 12px 12px 12px;
+}
+
+.chat-bubble.user {
+  background: rgba(124,92,252,0.2);
+  border: 1px solid rgba(124,92,252,0.3);
+  color: var(--text);
+  align-self: flex-end;
+  border-radius: 12px 4px 12px 12px;
+}
+
+.chat-bubble.flow-match {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  color: var(--text);
+  align-self: flex-start;
+  border-radius: 4px 12px 12px 12px;
+}
+
+.bubble-label {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  margin-bottom: 5px;
+}
+
+.flow-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--teal);
+  margin-bottom: 5px;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 14px 18px;
+  align-self: flex-start;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: bounce 1.2s infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chat-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+  resize: none;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+
+.chat-input:focus { border-color: var(--accent); }
+.chat-input::placeholder { color: var(--text-3); }
+.chat-input:disabled { opacity: 0.5; }
+
+/* ─── Config preview ──────────────────────────────────────────────────────── */
+.config-preview {
+  background: #0A0C12;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #A8B5C8;
+  overflow-y: auto;
+  max-height: 280px;
+  white-space: pre;
+  line-height: 1.6;
+}
+
+.step-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  align-items: center;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ─── Toast ───────────────────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+}
+
+.toast {
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  animation: slide-in 0.2s ease;
+  max-width: 300px;
+}
+
+.toast-success { background: rgba(16,185,129,0.2); border: 1px solid var(--teal); color: var(--teal); }
+.toast-error   { background: rgba(239,68,68,0.2);  border: 1px solid var(--red);  color: var(--red);  }
+
+@keyframes slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-text">AGILIZ</div>
+    <div class="sidebar-logo-sub">bot manager</div>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-item active" id="nav-dashboard" onclick="navigate('dashboard')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+        <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+      </svg>
+      Dashboard
+    </button>
+    <button class="nav-item" id="nav-create" onclick="navigate('create')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6.5"/><line x1="8" y1="5" x2="8" y2="11"/><line x1="5" y1="8" x2="11" y2="8"/>
+      </svg>
+      Novo Bot
+    </button>
+  </nav>
+  <div class="sidebar-footer">v1.0 · .NET 10</div>
+</aside>
+
+<!-- ─── Main ──────────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- Dashboard -->
+  <div class="view active" id="view-dashboard">
+    <div class="page-header">
+      <div>
+        <div class="page-title">bots ativos</div>
+        <div class="page-sub">gerencie e teste seus bots WhatsApp</div>
+      </div>
+      <button class="btn btn-primary" onclick="navigate('create')">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
+        </svg>
+        Novo Bot
+      </button>
+    </div>
+    <div id="bots-grid" class="bots-grid"></div>
+  </div>
+
+  <!-- Wizard Create/Edit -->
+  <div class="view" id="view-create">
+    <div class="page-header">
+      <div>
+        <div class="page-title" id="wizard-title">novo bot</div>
+        <div class="page-sub" id="wizard-sub">siga os passos para configurar</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('dashboard')">← voltar</button>
+    </div>
+    <div class="wizard-content">
+      <!-- Step bar -->
+      <div class="step-bar">
+        <div class="step active" id="step-1">
+          <div class="step-num">1</div>
+          <div class="step-label">Informações</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step-2">
+          <div class="step-num">2</div>
+          <div class="step-label">Entrevista</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step-3">
+          <div class="step-num">3</div>
+          <div class="step-label">Confirmar</div>
+        </div>
+      </div>
+
+      <!-- Step 1: Info form -->
+      <div id="wizard-step-1">
+        <div class="form-card">
+          <div class="form-group">
+            <label class="form-label">tenant_id</label>
+            <input id="f-tenant" class="form-input" type="text" placeholder="ex: pizzaria-roma" />
+            <div class="form-hint">Identificador único do cliente. Sem espaços ou acentos.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">número_twilio</label>
+            <input id="f-number" class="form-input" type="text" placeholder="whatsapp:+5521999999999" />
+            <div class="form-hint">Número Twilio no formato whatsapp:+55...</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">provider_llm</label>
+            <div class="provider-selector">
+              <label class="provider-option selected" id="opt-groq">
+                <input type="radio" name="provider" value="Groq" checked onchange="selectProvider(this.closest('.provider-option'), 'groq')">
+                <div class="provider-name">Groq</div>
+                <div class="provider-desc">MVP / testes internos</div>
+              </label>
+              <label class="provider-option" id="opt-claude">
+                <input type="radio" name="provider" value="Claude" onchange="selectProvider(this.closest('.provider-option'), 'claude')">
+                <div class="provider-name">Claude</div>
+                <div class="provider-desc">Produção</div>
+              </label>
+            </div>
+          </div>
+          <div class="step-actions">
+            <button class="btn btn-primary" onclick="startInterview()">Iniciar Entrevista →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Chat -->
+      <div id="wizard-step-2" style="display:none; flex-direction:column; gap:16px;">
+        <div class="chat-area" style="height: calc(100vh - 320px);">
+          <div class="chat-messages" id="wizard-chat"></div>
+          <div class="chat-input-row">
+            <textarea id="wizard-input" class="chat-input" rows="1"
+              placeholder="Responda as perguntas do agente..."
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendWizardMessage()}"
+            ></textarea>
+            <button class="btn btn-primary" onclick="sendWizardMessage()" id="wizard-send-btn">Enviar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Confirm -->
+      <div id="wizard-step-3" style="display:none;">
+        <div class="form-card" style="max-width:700px;">
+          <div class="form-group">
+            <label class="form-label">config_gerado</label>
+            <div class="config-preview" id="config-preview-json"></div>
+          </div>
+          <div style="display:flex;gap:16px;">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">tenant_id</label>
+              <input id="f-tenant-confirm" class="form-input" type="text" />
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">número_twilio</label>
+              <input id="f-number-confirm" class="form-input" type="text" />
+            </div>
+          </div>
+          <div class="step-actions">
+            <button class="btn btn-primary" onclick="saveBot()">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 11v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2"/><path d="M8 3v8M5 8l3 3 3-3"/>
+              </svg>
+              Salvar Bot
+            </button>
+            <button class="btn btn-ghost" onclick="goStep(2)">← Reeditar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test -->
+  <div class="view" id="view-test">
+    <div class="page-header">
+      <div>
+        <div class="page-title">testando: <span id="test-bot-name" style="color:var(--accent);font-family:var(--mono)"></span></div>
+        <div class="page-sub">simula o runtime — sem Twilio</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('dashboard')">← voltar</button>
+    </div>
+    <div style="padding:20px 28px;display:flex;flex-direction:column;flex:1;overflow:hidden;">
+      <div class="chat-area" style="flex:1">
+        <div class="chat-messages" id="test-chat"></div>
+        <div class="chat-input-row">
+          <textarea id="test-input" class="chat-input" rows="1"
+            placeholder="Digite uma mensagem como se fosse o usuário..."
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendTestMessage()}"
+          ></textarea>
+          <button class="btn btn-teal" onclick="sendTestMessage()" id="test-send-btn">Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Toasts -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  currentView: 'dashboard',
+  wizardMode: 'create',       // 'create' | 'edit'
+  editingTenantId: null,
+  sessionId: null,
+  extractedConfig: null,      // parsed JSON from agent
+  testBotId: null,
+  testHistory: [],             // [{ role, content }]
+};
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function navigate(view, params = {}) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  document.getElementById(`view-${view}`).classList.add('active');
+  const navEl = document.getElementById(`nav-${view}`);
+  if (navEl) navEl.classList.add('active');
+
+  state.currentView = view;
+
+  if (view === 'dashboard') loadDashboard();
+  if (view === 'create') initWizard(params.mode || 'create', params.tenantId || null);
+  if (view === 'test') initTest(params.tenantId);
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const grid = document.getElementById('bots-grid');
+  grid.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:8px;">carregando...</div>';
+
+  const bots = await api('/api/bots');
+  if (!bots || bots.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-state-icon">&gt;_</div>
+        <p>Nenhum bot configurado ainda.</p>
+        <button class="btn btn-primary" onclick="navigate('create')">Criar primeiro bot</button>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = bots.map(b => `
+    <div class="bot-card" id="card-${b.tenantId}">
+      <div class="bot-card-id">${b.tenantId}</div>
+      <div class="bot-card-meta">
+        <span class="badge badge-${b.provider.toLowerCase()}">${b.provider}</span>
+        <span class="bot-card-flows">${b.flowCount} flow${b.flowCount !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="bot-card-number">${b.twilioNumber}</div>
+      <div class="bot-card-actions">
+        <button class="btn btn-teal btn-sm" onclick="navigate('test',{tenantId:'${b.tenantId}'})">▶ Testar</button>
+        <button class="btn btn-ghost btn-sm" onclick="navigate('create',{mode:'edit',tenantId:'${b.tenantId}'})">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteBot('${b.tenantId}')">Deletar</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteBot(id) {
+  if (!confirm(`Deletar o bot "${id}"? Esta ação não pode ser desfeita.`)) return;
+  const r = await fetch(`/api/bots/${id}`, { method: 'DELETE' });
+  if (r.ok) { toast('Bot deletado.', 'success'); loadDashboard(); }
+  else toast('Erro ao deletar.', 'error');
+}
+
+// ─── Wizard ───────────────────────────────────────────────────────────────────
+function selectProvider(el, key) {
+  document.querySelectorAll('.provider-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function initWizard(mode, tenantId) {
+  state.wizardMode = mode;
+  state.editingTenantId = tenantId;
+  state.sessionId = null;
+  state.extractedConfig = null;
+  state.testHistory = [];
+
+  document.getElementById('wizard-title').textContent = mode === 'edit' ? `editando: ${tenantId}` : 'novo bot';
+  document.getElementById('wizard-sub').textContent = mode === 'edit'
+    ? 'altere o que precisar via entrevista'
+    : 'siga os passos para configurar';
+
+  if (mode === 'edit') {
+    document.getElementById('f-tenant').value = tenantId;
+    document.getElementById('f-number').value = '';
+    // Fetch existing number
+    api(`/api/bots/${tenantId}`).then(c => {
+      if (c) document.getElementById('f-number').value = c.twilioNumber || '';
+    });
+  } else {
+    document.getElementById('f-tenant').value = '';
+    document.getElementById('f-number').value = '';
+  }
+
+  goStep(1);
+  document.getElementById('nav-create').classList.add('active');
+}
+
+function goStep(n) {
+  [1, 2, 3].forEach(i => {
+    document.getElementById(`wizard-step-${i}`).style.display = i === n ? (i === 2 ? 'flex' : 'block') : 'none';
+    const stepEl = document.getElementById(`step-${i}`);
+    stepEl.classList.remove('active', 'done');
+    if (i === n) stepEl.classList.add('active');
+    else if (i < n) stepEl.classList.add('done');
+  });
+}
+
+async function startInterview() {
+  const tenantId = document.getElementById('f-tenant').value.trim();
+  const number   = document.getElementById('f-number').value.trim();
+  if (!tenantId || !number) { toast('Preencha o tenant ID e o número Twilio.', 'error'); return; }
+
+  const r = await api('/api/sessions', 'POST', {
+    mode: state.wizardMode,
+    tenantId: state.editingTenantId || tenantId
+  });
+  if (!r) return;
+
+  state.sessionId = r.sessionId;
+  goStep(2);
+
+  const chat = document.getElementById('wizard-chat');
+  chat.innerHTML = '';
+  appendBubble('wizard-chat', 'agent', 'Agiliz', r.greeting);
+}
+
+async function sendWizardMessage() {
+  const input = document.getElementById('wizard-input');
+  const msg = input.value.trim();
+  if (!msg || !state.sessionId) return;
+
+  input.value = '';
+  appendBubble('wizard-chat', 'user', 'Você', msg);
+  setLoading('wizard-chat', true);
+
+  document.getElementById('wizard-send-btn').disabled = true;
+  input.disabled = true;
+
+  const r = await api(`/api/sessions/${state.sessionId}/message`, 'POST', { message: msg });
+  setLoading('wizard-chat', false);
+  document.getElementById('wizard-send-btn').disabled = false;
+  input.disabled = false;
+
+  if (!r) { toast('Erro ao contatar o agente.', 'error'); return; }
+
+  if (r.reply) appendBubble('wizard-chat', 'agent', 'Agiliz', r.reply);
+
+  if (r.configReady && r.jsonConfig) {
+    state.extractedConfig = JSON.parse(r.jsonConfig);
+    goToConfirm();
+  } else {
+    input.focus();
+  }
+}
+
+function goToConfirm() {
+  const tenantId = document.getElementById('f-tenant').value.trim();
+  const number   = document.getElementById('f-number').value.trim();
+  const provider = document.querySelector('input[name="provider"]:checked').value;
+
+  document.getElementById('f-tenant-confirm').value = tenantId;
+  document.getElementById('f-number-confirm').value = number;
+
+  const preview = {
+    tenantId,
+    twilioNumber: number,
+    provider,
+    systemPrompt: state.extractedConfig.systemPrompt,
+    flows: state.extractedConfig.flows,
+    llm: { model: provider === 'Groq' ? 'llama-3.3-70b-versatile' : 'claude-sonnet-4-20250514', maxTokens: 300 }
+  };
+
+  document.getElementById('config-preview-json').textContent = JSON.stringify(preview, null, 2);
+  goStep(3);
+}
+
+async function saveBot() {
+  const tenantId = document.getElementById('f-tenant-confirm').value.trim();
+  const number   = document.getElementById('f-number-confirm').value.trim();
+  const provider = document.querySelector('input[name="provider"]:checked').value;
+
+  if (!tenantId || !number) { toast('Preencha tenant ID e número.', 'error'); return; }
+  if (!state.extractedConfig) { toast('Config não gerado.', 'error'); return; }
+
+  const body = {
+    tenantId,
+    twilioNumber: number,
+    provider,
+    systemPrompt: state.extractedConfig.systemPrompt,
+    flows: state.extractedConfig.flows,
+    maxTokens: 300
+  };
+
+  const r = await fetch('/api/bots', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (r.ok) {
+    toast(`Bot "${tenantId}" salvo com sucesso!`, 'success');
+    if (state.sessionId) fetch(`/api/sessions/${state.sessionId}`, { method: 'DELETE' }).catch(() => {});
+    navigate('dashboard');
+  } else {
+    toast('Erro ao salvar o bot.', 'error');
+  }
+}
+
+// ─── Test ─────────────────────────────────────────────────────────────────────
+function initTest(tenantId) {
+  state.testBotId = tenantId;
+  state.testHistory = [];
+  document.getElementById('test-bot-name').textContent = tenantId;
+  const chat = document.getElementById('test-chat');
+  chat.innerHTML = '';
+  appendBubble('test-chat', 'agent', 'Bot',
+    `Sessão de teste para [${tenantId}] iniciada. Digite uma mensagem como usuário.`);
+}
+
+async function sendTestMessage() {
+  const input = document.getElementById('test-input');
+  const msg = input.value.trim();
+  if (!msg || !state.testBotId) return;
+
+  input.value = '';
+  appendBubble('test-chat', 'user', 'Usuário', msg);
+  setLoading('test-chat', true);
+  document.getElementById('test-send-btn').disabled = true;
+  input.disabled = true;
+
+  const r = await api(`/api/bots/${state.testBotId}/test`, 'POST', {
+    message: msg,
+    history: state.testHistory
+  });
+
+  setLoading('test-chat', false);
+  document.getElementById('test-send-btn').disabled = false;
+  input.disabled = false;
+
+  if (!r) { toast('Erro ao testar o bot.', 'error'); return; }
+
+  if (r.flowMatch) {
+    appendBubble('test-chat', 'flow-match', `⚡ flow: ${r.flowMatch}`, r.reply);
+  } else {
+    appendBubble('test-chat', 'agent', 'Bot', r.reply);
+  }
+
+  // Atualiza histórico
+  state.testHistory.push({ role: 'user', content: msg });
+  state.testHistory.push({ role: 'assistant', content: r.reply });
+  if (state.testHistory.length > 10) state.testHistory.splice(0, 2);
+
+  input.focus();
+}
+
+// ─── Chat utils ───────────────────────────────────────────────────────────────
+function appendBubble(chatId, type, label, text) {
+  const chat = document.getElementById(chatId);
+  const bubble = document.createElement('div');
+
+  if (type === 'flow-match') {
+    bubble.innerHTML = `
+      <div class="flow-badge-inline">⚡ ${escapeHtml(label)}</div>
+      <div class="chat-bubble flow-match">${escapeHtml(text)}</div>`;
+  } else {
+    bubble.innerHTML = `
+      <div class="bubble-label">${escapeHtml(label)}</div>
+      <div class="chat-bubble ${type}">${escapeHtml(text)}</div>`;
+  }
+
+  bubble.style.display = 'flex';
+  bubble.style.flexDirection = 'column';
+  bubble.style.alignItems = type === 'user' ? 'flex-end' : 'flex-start';
+  chat.appendChild(bubble);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function setLoading(chatId, on) {
+  const chat = document.getElementById(chatId);
+  const existing = chat.querySelector('.typing-indicator');
+  if (on && !existing) {
+    const t = document.createElement('div');
+    t.className = 'typing-indicator';
+    t.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    chat.appendChild(t);
+    chat.scrollTop = chat.scrollHeight;
+  } else if (!on && existing) {
+    existing.remove();
+  }
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+async function api(url, method = 'GET', body = null) {
+  try {
+    const opts = { method, headers: {} };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const r = await fetch(url, opts);
+    if (!r.ok) { console.error(`${method} ${url} → ${r.status}`); return null; }
+    if (r.status === 204) return {};
+    return r.json();
+  } catch (e) {
+    console.error(e);
+    toast('Erro de conexão com o servidor.', 'error');
+    return null;
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>
