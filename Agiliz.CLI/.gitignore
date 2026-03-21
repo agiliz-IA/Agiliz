@@ -1,0 +1,20 @@
+# Build
+bin/
+obj/
+
+# Configs dos clientes — NUNCA subir
+configs/
+
+# Variáveis de ambiente
+.env
+*.env
+
+# IDEs
+.vs/
+.vscode/
+*.user
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

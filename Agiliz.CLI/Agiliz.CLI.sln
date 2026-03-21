@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agiliz.CLI", "Agiliz.CLI.csproj", "{9E21F725-FA84-FDCB-0BF0-75D6098172DB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9E21F725-FA84-FDCB-0BF0-75D6098172DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E21F725-FA84-FDCB-0BF0-75D6098172DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E21F725-FA84-FDCB-0BF0-75D6098172DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E21F725-FA84-FDCB-0BF0-75D6098172DB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {007C0C7A-9ED6-43F5-BA5C-4F2C0AB884A6}
+	EndGlobalSection
+EndGlobal
