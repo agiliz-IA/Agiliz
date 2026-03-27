@@ -5,15 +5,27 @@ using Agiliz.Core.Models;
 
 namespace Agiliz.Core.LLM;
 
-public sealed class ClaudeClient(HttpClient http, string systemPrompt, LlmSettings settings) : ILlmClient
+public sealed class ClaudeClient : ILlmClient
 {
-    private const string ApiVersion = "2023-06-01";
+    private readonly HttpClient _http;
+    private readonly string _systemPrompt;
+    private readonly LlmSettings _settings;
+    private readonly string _endpoint;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    /// <param name="baseUrl">Override for tests (e.g. WireMock URL). Defaults to https://api.anthropic.com</param>
+    public ClaudeClient(HttpClient http, string systemPrompt, LlmSettings settings, string? baseUrl = null)
+    {
+        _http = http;
+        _systemPrompt = systemPrompt;
+        _settings = settings;
+        _endpoint = $"{(baseUrl ?? "https://api.anthropic.com").TrimEnd('/')}/v1/messages";
+    }
 
     public async Task<string> CompleteAsync(
         IReadOnlyList<ConversationMessage> history,
@@ -27,15 +39,13 @@ public sealed class ClaudeClient(HttpClient http, string systemPrompt, LlmSettin
 
         var body = new
         {
-            model = settings.Model,
-            max_tokens = settings.MaxTokens,
-            system = systemPrompt,
+            model = _settings.Model,
+            max_tokens = _settings.MaxTokens,
+            system = _systemPrompt,
             messages
         };
 
-        var response = await http.PostAsJsonAsync(
-            "https://api.anthropic.com/v1/messages",
-            body, JsonOpts, ct);
+        var response = await _http.PostAsJsonAsync(_endpoint, body, JsonOpts, ct);
 
         response.EnsureSuccessStatusCode();
 
@@ -45,8 +55,7 @@ public sealed class ClaudeClient(HttpClient http, string systemPrompt, LlmSettin
         return result.Content[0].Text;
     }
 
-    // ─── Response DTOs ───────────────────────────────────────────────────────
-
+    // Response DTOs
     private sealed record ClaudeResponse(List<ClaudeBlock> Content);
     private sealed record ClaudeBlock(string Type, string Text);
 }

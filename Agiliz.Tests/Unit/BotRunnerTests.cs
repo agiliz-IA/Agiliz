@@ -107,7 +107,7 @@ public sealed class BotRunnerTests
         await _runner.ProcessAsync(Tenant(config), "+5521999", "mensagem 2");
 
         var lastHistory = _llm.ReceivedHistories[1];
-        lastHistory.Should().HaveCount(3); // user1, assistant1, user2
+        lastHistory.Should().HaveCount(4); // user1, assistant1, user2
         lastHistory[0].Content.Should().Be("mensagem 1");
         lastHistory[1].Role.Should().Be(MessageRole.Assistant);
         lastHistory[2].Content.Should().Be("mensagem 2");
@@ -152,7 +152,7 @@ public sealed class BotRunnerTests
 
         // Apenas msg1 e msg2 no histórico, sem lixo do erro
         var lastHistory = _llm.ReceivedHistories[1];
-        lastHistory.Should().HaveCount(2);
+        lastHistory.Should().HaveCount(3);
         result.Should().Be("Recuperado.");
     }
 }

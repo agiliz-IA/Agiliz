@@ -49,7 +49,7 @@ public sealed class LlmWireMockServer : IDisposable
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody($$"""{"error":{"message":"{{message}}"}}"""));
+                .WithBody($$$"""{"error":{"message":"{{message}}"}}"""));
         return this;
     }
 

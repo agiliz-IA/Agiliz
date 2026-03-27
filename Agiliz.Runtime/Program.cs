@@ -1,5 +1,7 @@
 using Agiliz.Core.Config;
-using Agiliz.Core.Twilio;
+using Agiliz.Core.LLM;
+using Agiliz.Core.Messaging;
+using Agiliz.Core.Models;
 using Agiliz.Runtime.Endpoints;
 using Agiliz.Runtime.Services;
 
@@ -10,16 +12,16 @@ var configsDir = builder.Configuration["ConfigsDir"]
     ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
 
 // ─── Serviços ─────────────────────────────────────────────────────────────────
-builder.Services.AddSingleton(_ =>
+builder.Services.AddSingleton(sp =>
 {
-    var logger = LoggerFactory.Create(b => b.AddConsole())
-                              .CreateLogger<TenantRegistry>();
-    return new TenantRegistry(configsDir, logger);
+    var logger = sp.GetRequiredService<ILogger<TenantRegistry>>();
+    var llmFactory = sp.GetService<Func<BotConfig, ILlmClient>>(); // null in production → uses default
+    return new TenantRegistry(configsDir, logger, llmFactory);
 });
 
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<BotRunner>();
-builder.Services.AddSingleton<ITwilioSender, TwilioSender>();
+builder.Services.AddSingleton<IMessageProvider, EvolutionClient>();
 builder.Services.AddHostedService<SessionPurgeService>();
 
 // ─── Build ────────────────────────────────────────────────────────────────────
@@ -41,3 +43,6 @@ app.MapGet("/health", () => Results.Ok(new
 }));
 
 app.Run();
+
+// Exposes Program to WebApplicationFactory in tests
+namespace Agiliz.Runtime { public partial class Program { } }

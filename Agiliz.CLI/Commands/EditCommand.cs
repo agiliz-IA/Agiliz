@@ -70,7 +70,7 @@ public static class EditCommand
         var updated = new BotConfig
         {
             TenantId = existing.TenantId,
-            TwilioNumber = existing.TwilioNumber,
+            WhatsAppNumber = existing.WhatsAppNumber,
             SystemPrompt = systemPrompt,
             Flows = flows,
             Llm = existing.Llm

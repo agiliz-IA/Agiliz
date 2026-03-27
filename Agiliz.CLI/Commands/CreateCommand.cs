@@ -24,12 +24,12 @@ public static class CreateCommand
                 return;
         }
 
-        // ─── 2. Número Twilio ──────────────────────────────────────────────────
-        ConsoleRenderer.Info("\nFormato esperado: whatsapp:+5521999999999");
-        var twilioNumber = AnsiConsole.Ask<string>("[bold]Número Twilio do cliente[/]:");
+        // ─── 2. Número WhatsApp ───────────────────────────────────────────────
+        ConsoleRenderer.Info("\nFormato esperado: 5521999999999 (apenas dígitos com país)");
+        var whatsappNumber = AnsiConsole.Ask<string>("[bold]Número WhatsApp do cliente[/]:");
 
-        if (!twilioNumber.StartsWith("whatsapp:+"))
-            twilioNumber = $"whatsapp:{twilioNumber}";
+        // Remove any non-digits
+        whatsappNumber = System.Text.RegularExpressions.Regex.Replace(whatsappNumber, @"\D", "");
 
         // ─── 3. Provider ───────────────────────────────────────────────────────
         var provider = AnsiConsole.Prompt(
@@ -80,7 +80,7 @@ public static class CreateCommand
         var config = new BotConfig
         {
             TenantId = tenantId,
-            TwilioNumber = twilioNumber,
+            WhatsAppNumber = whatsappNumber,
             SystemPrompt = systemPrompt,
             Flows = flows,
             Llm = new LlmSettings

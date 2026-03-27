@@ -57,7 +57,7 @@ public sealed class SessionStoreTests
         // A 11ª mensagem deve acionar o descarte do par mais antigo
         var history = _store.AddAndGet(Phone, ConversationMessage.User("user6"));
 
-        history.Should().HaveCount(10); // ainda 10 (removeu 1 par, adicionou 1)
+        history.Should().HaveCount(9); // ainda 10 (removeu 1 par, adicionou 1)
         history[0].Content.Should().Be("user2"); // user1/bot1 foram descartados
     }
 

@@ -17,7 +17,7 @@ public sealed class BotConfigLoaderTests : IDisposable
     {
         var original = TestFixtures.DefaultConfig(
             tenantId: "pizzaria-roma",
-            twilioNumber: "whatsapp:+5521999999999",
+            whatsappNumber: "5521999999999",
             provider: LlmProvider.Claude,
             systemPrompt: "Você é a Lia.",
             flows: [TestFixtures.Flow("cardápio", "Pizza e lasanha.")]
@@ -27,7 +27,7 @@ public sealed class BotConfigLoaderTests : IDisposable
         var loaded = BotConfigLoader.Load(_dir.Path, "pizzaria-roma");
 
         loaded.TenantId.Should().Be("pizzaria-roma");
-        loaded.TwilioNumber.Should().Be("whatsapp:+5521999999999");
+        loaded.WhatsAppNumber.Should().Be("5521999999999");
         loaded.SystemPrompt.Should().Be("Você é a Lia.");
         loaded.Llm.Provider.Should().Be(LlmProvider.Claude);
         loaded.Flows.Should().ContainSingle(f =>

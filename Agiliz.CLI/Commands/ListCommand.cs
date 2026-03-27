@@ -31,7 +31,7 @@ public static class ListCommand
                 var config = BotConfigLoader.Load(configsDir, id);
                 table.AddRow(
                     $"[bold]{id}[/]",
-                    config.TwilioNumber,
+                    config.WhatsAppNumber,
                     config.Llm.Provider == LlmProvider.Groq ? "[yellow]Groq[/]" : "[mediumpurple1]Claude[/]",
                     config.Flows.Count.ToString()
                 );

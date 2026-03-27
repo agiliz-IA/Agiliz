@@ -6,73 +6,44 @@ using Xunit;
 
 namespace Agiliz.Tests.Integration;
 
-/// <summary>
-/// Testa o GroqClient contra um servidor HTTP local (WireMock).
-/// Não usa internet. Roda em milissegundos.
-/// </summary>
 public sealed class GroqClientTests : IDisposable
 {
     private readonly LlmWireMockServer _mock = new();
 
-    private GroqClient BuildClient(string? customBaseUrl = null)
-    {
-        var http = new HttpClient { BaseAddress = new Uri(customBaseUrl ?? _mock.BaseUrl) };
-        http.DefaultRequestHeaders.Add("Authorization", "Bearer fake-key");
-
-        var settings = new LlmSettings
-        {
-            Provider = LlmProvider.Groq,
-            Model = "llama-3.3-70b-versatile",
-            MaxTokens = 300
-        };
-
-        return new GroqClient(http, "System prompt de teste.", settings);
-    }
+    private GroqClient BuildClient() =>
+        new(new HttpClient(), "System prompt de teste.",
+            new LlmSettings { Provider = LlmProvider.Groq, Model = "llama-3.3-70b-versatile", MaxTokens = 300 },
+            baseUrl: _mock.BaseUrl);  // <-- aponta para WireMock, nao para api.groq.com
 
     [Fact]
     public async Task CompleteAsync_WhenServerReturnsSuccess_ReturnsReply()
     {
-        _mock.SetupGroqSuccess("Olá do Groq!");
-
-        var client = BuildClient();
-        var result = await client.CompleteAsync([ConversationMessage.User("oi")]);
-
-        result.Should().Be("Olá do Groq!");
+        _mock.SetupGroqSuccess("Ola do Groq!");
+        var result = await BuildClient().CompleteAsync([ConversationMessage.User("oi")]);
+        result.Should().Be("Ola do Groq!");
     }
 
     [Fact]
     public async Task CompleteAsync_WhenServerReturns429_ThrowsHttpException()
     {
         _mock.SetupGroqError(429);
-
-        var client = BuildClient();
-        var act = () => client.CompleteAsync([ConversationMessage.User("oi")]);
-
+        var act = () => BuildClient().CompleteAsync([ConversationMessage.User("oi")]);
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
     [Fact]
     public async Task CompleteAsync_SendsSystemPromptAsFirstMessage()
     {
-        _mock.SetupGroqSuccess();
-
-        var http = new HttpClient { BaseAddress = new Uri(_mock.BaseUrl) };
-        http.DefaultRequestHeaders.Add("Authorization", "Bearer fake-key");
-        var settings = new LlmSettings { Model = "llama-3.3-70b-versatile", MaxTokens = 100 };
-        var client = new GroqClient(http, "Prompt especial.", settings);
-
-        await client.CompleteAsync([ConversationMessage.User("pergunta")]);
-
-        // Verifica que o request chegou ao mock (WireMock captura)
-        _mock.BaseUrl.Should().NotBeNull(); // sanity
-        // Verificação mais profunda pode ser feita via _server.LogEntries se necessário
+        _mock.SetupGroqSuccess("ok");
+        await BuildClient().CompleteAsync([ConversationMessage.User("pergunta")]);
+        // WireMock recebeu a request -- se chegou aqui, o endpoint foi atingido
+        _mock.BaseUrl.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
     public async Task CompleteAsync_WithMultipleHistoryMessages_SendsAllToServer()
     {
         _mock.SetupGroqSuccess("ok");
-        var client = BuildClient();
 
         var history = new List<ConversationMessage>
         {
@@ -81,7 +52,7 @@ public sealed class GroqClientTests : IDisposable
             ConversationMessage.User("msg2")
         };
 
-        var result = await client.CompleteAsync(history);
+        var result = await BuildClient().CompleteAsync(history);
         result.Should().Be("ok");
     }
 

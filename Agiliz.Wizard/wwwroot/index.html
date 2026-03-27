@@ -464,6 +464,28 @@ body {
   margin-bottom: 5px;
 }
 
+/* WhatsApp formatting inside bubbles */
+.chat-bubble b   { font-weight: 600; }
+.chat-bubble i   { font-style: italic; }
+.chat-bubble s   { text-decoration: line-through; }
+.chat-bubble code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(0,0,0,0.18);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.chat-bubble pre {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(0,0,0,0.22);
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .flow-badge-inline {
   display: inline-flex;
   align-items: center;
@@ -814,7 +836,7 @@ async function loadDashboard() {
         <span class="badge badge-${b.provider.toLowerCase()}">${b.provider}</span>
         <span class="bot-card-flows">${b.flowCount} flow${b.flowCount !== 1 ? 's' : ''}</span>
       </div>
-      <div class="bot-card-number">${b.twilioNumber}</div>
+      <div class="bot-card-number">${b.whatsAppNumber}</div>
       <div class="bot-card-actions">
         <button class="btn btn-teal btn-sm" onclick="navigate('test',{tenantId:'${b.tenantId}'})">▶ Testar</button>
         <button class="btn btn-ghost btn-sm" onclick="navigate('create',{mode:'edit',tenantId:'${b.tenantId}'})">Editar</button>
@@ -853,7 +875,7 @@ function initWizard(mode, tenantId) {
     document.getElementById('f-number').value = '';
     // Fetch existing number
     api(`/api/bots/${tenantId}`).then(c => {
-      if (c) document.getElementById('f-number').value = c.twilioNumber || '';
+      if (c) document.getElementById('f-number').value = c.whatsAppNumber || '';
     });
   } else {
     document.getElementById('f-tenant').value = '';
@@ -932,7 +954,7 @@ function goToConfirm() {
 
   const preview = {
     tenantId,
-    twilioNumber: number,
+    whatsappNumber: number,
     provider,
     systemPrompt: state.extractedConfig.systemPrompt,
     flows: state.extractedConfig.flows,
@@ -953,7 +975,7 @@ async function saveBot() {
 
   const body = {
     tenantId,
-    twilioNumber: number,
+    whatsappNumber: number,
     provider,
     systemPrompt: state.extractedConfig.systemPrompt,
     flows: state.extractedConfig.flows,
@@ -1027,14 +1049,17 @@ function appendBubble(chatId, type, label, text) {
   const chat = document.getElementById(chatId);
   const bubble = document.createElement('div');
 
+  // User messages: escape only. Bot/agent: parse WhatsApp formatting.
+  const renderText = (type === 'user') ? escapeHtml(text) : formatWhatsApp(text);
+
   if (type === 'flow-match') {
     bubble.innerHTML = `
       <div class="flow-badge-inline">⚡ ${escapeHtml(label)}</div>
-      <div class="chat-bubble flow-match">${escapeHtml(text)}</div>`;
+      <div class="chat-bubble flow-match">${formatWhatsApp(text)}</div>`;
   } else {
     bubble.innerHTML = `
       <div class="bubble-label">${escapeHtml(label)}</div>
-      <div class="chat-bubble ${type}">${escapeHtml(text)}</div>`;
+      <div class="chat-bubble ${type}">${renderText}</div>`;
   }
 
   bubble.style.display = 'flex';
@@ -1086,6 +1111,24 @@ function toast(msg, type = 'success') {
 
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatWhatsApp(raw) {
+  // 1. Escape HTML first to prevent injection
+  let s = escapeHtml(raw);
+  // 2. Code blocks (```...```) — multi-line, process before anything else
+  s = s.replace(/```([\s\S]*?)```/g, (_, c) => '<pre>' + c.trim() + '</pre>');
+  // 3. Inline code (`...`)
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // 4. Bold (*word*) — must not span newlines
+  s = s.replace(/\*([^\*\n]+)\*/g, '<b>$1</b>');
+  // 5. Italic (_word_)
+  s = s.replace(/\_([^\_\n]+)\_/g, '<i>$1</i>');
+  // 6. Strikethrough (~word~)
+  s = s.replace(/~([^~\n]+)~/g, '<s>$1</s>');
+  // 7. Newlines to <br> (only outside pre blocks)
+  s = s.replace(/([^>])\n/g, '$1<br>');
+  return s;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

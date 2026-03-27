@@ -25,11 +25,16 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
 
     <!-- HTTP mocking (simula Groq/Claude/Twilio) -->
-    <PackageReference Include="WireMock.Net"                  Version="1.6.9" />
+    <PackageReference Include="WireMock.Net"                       Version="1.6.9" />
+
+    <!-- E2E -->
+    <PackageReference Include="Microsoft.Playwright"               Version="1.50.0" />
+    <PackageReference Include="Microsoft.Playwright.MSTest"        Version="1.50.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Agiliz.Core\Agiliz.Core.csproj" />
+    <ProjectReference Include="..\Agiliz.CLI\Agiliz.CLI.csproj" />
     <ProjectReference Include="..\Agiliz.Runtime\Agiliz.Runtime.csproj" />
     <ProjectReference Include="..\Agiliz.Wizard\Agiliz.Wizard.csproj" />
   </ItemGroup>

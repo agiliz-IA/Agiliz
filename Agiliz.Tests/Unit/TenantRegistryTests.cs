@@ -23,10 +23,10 @@ public sealed class TenantRegistryTests : IDisposable
     public void Resolve_WithCorrectNumber_ReturnsTenant()
     {
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(
-            tenantId: "bot-a", twilioNumber: "whatsapp:+5521999"));
+            tenantId: "bot-a", whatsappNumber: "5521999"));
 
         var registry = BuildRegistry();
-        var entry = registry.Resolve("whatsapp:+5521999");
+        var entry = registry.Resolve("5521999");
 
         entry.Should().NotBeNull();
         entry!.Config.TenantId.Should().Be("bot-a");
@@ -35,10 +35,10 @@ public sealed class TenantRegistryTests : IDisposable
     [Fact]
     public void Resolve_WithUnknownNumber_ReturnsNull()
     {
-        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(twilioNumber: "whatsapp:+5521111"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(whatsappNumber: "5521111"));
 
         var registry = BuildRegistry();
-        var entry = registry.Resolve("whatsapp:+5599999");
+        var entry = registry.Resolve("5599999");
 
         entry.Should().BeNull();
     }
@@ -46,18 +46,18 @@ public sealed class TenantRegistryTests : IDisposable
     [Fact]
     public void Resolve_IsCaseInsensitive()
     {
-        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(twilioNumber: "whatsapp:+5521999"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(whatsappNumber: "5521999"));
 
         var registry = BuildRegistry();
 
-        registry.Resolve("WHATSAPP:+5521999").Should().NotBeNull();
+        registry.Resolve("5521999").Should().NotBeNull();
     }
 
     [Fact]
     public void Count_ReflectsNumberOfLoadedTenants()
     {
-        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "a", twilioNumber: "whatsapp:+1"));
-        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "b", twilioNumber: "whatsapp:+2"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "a", whatsappNumber: "1"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "b", whatsappNumber: "2"));
 
         var registry = BuildRegistry();
 
@@ -75,14 +75,14 @@ public sealed class TenantRegistryTests : IDisposable
     public void Constructor_WhenConfigIsCorrupt_SkipsAndLoadsRest()
     {
         // Salva um config válido
-        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bom", twilioNumber: "whatsapp:+1"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bom", whatsappNumber: "1"));
         // Salva um JSON corrompido manualmente
         File.WriteAllText(Path.Combine(_dir.Path, "corrompido.json"), "{ invalido }");
 
         var registry = BuildRegistry();
 
         registry.Count.Should().Be(1);
-        registry.Resolve("whatsapp:+1").Should().NotBeNull();
+        registry.Resolve("1").Should().NotBeNull();
     }
 
     public void Dispose()

@@ -1,8 +1,9 @@
 using System.Net;
-using System.Net.Http.Json;
+using System.Text.Json;
 using Agiliz.Core.Config;
-using Agiliz.Core.Twilio;
-using Agiliz.Runtime.Services;
+using Agiliz.Core.LLM;
+using Agiliz.Core.Messaging;
+using Agiliz.Core.Models;
 using Agiliz.Tests.Fakes;
 using Agiliz.Tests.Helpers;
 using FluentAssertions;
@@ -12,140 +13,135 @@ using Xunit;
 
 namespace Agiliz.Tests.Integration;
 
-/// <summary>
-/// Testa o Runtime em memória usando WebApplicationFactory.
-/// Sem Docker, sem rede real — usa Fakes injetados via DI.
-/// </summary>
 public sealed class RuntimeWebhookTests : IDisposable
 {
     private readonly TempDirectory _dir = TestFixtures.CreateTempDir();
-    private readonly FakeTwilioSender _fakeSender = new();
+    private readonly FakeMessageProvider _fakeProvider = new();
     private readonly FakeLlmClient _fakeLlm = new();
 
-    private WebApplicationFactory<global::Program> BuildFactory()
+    public RuntimeWebhookTests()
     {
-        // Salva config de teste em disco para o TenantRegistry encontrar
-        Environment.SetEnvironmentVariable("GROQ_API_KEY", "fake-key");
+        Environment.SetEnvironmentVariable("GROQ_API_KEY", "fake-groq-key");
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", "fake-anthropic-key");
+    }
 
+    private WebApplicationFactory<Runtime.Program> BuildFactory()
+    {
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(
             tenantId: "test-bot",
-            twilioNumber: "whatsapp:+15005550006"
-        ).WithFlows(("oi", "Olá! Como posso ajudar?")));
+            whatsappNumber: "15005550006"
+        ).WithFlows(("oi", "Ola! Como posso ajudar?")));
 
-        return new WebApplicationFactory<global::Program>()
+        return new WebApplicationFactory<Runtime.Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseSetting("ConfigsDir", _dir.Path);
                 builder.ConfigureServices(services =>
                 {
-                    // Substitui o TwilioSender real pelo fake
-                    services.AddSingleton<ITwilioSender>(_fakeSender);
-
-                    // Substitui o TenantRegistry para injetar nosso FakeLlmClient
-                    services.AddSingleton(sp =>
-                    {
-                        var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<TenantRegistry>>();
-                        var registry = new TenantRegistry(_dir.Path, logger);
-                        return registry;
-                    });
+                    services.AddSingleton<IMessageProvider>(_fakeProvider);
+                    // Provide a fake LLM factory so TenantRegistry never calls real APIs
+                    services.AddSingleton<Func<BotConfig, ILlmClient>>(_ => _ => _fakeLlm);
                 });
             });
     }
 
-    // ─── /health ──────────────────────────────────────────────────────────────
+    private static StringContent CreateEvolutionPayload(string instanceName, string remoteJid, string message)
+    {
+        var payload = new
+        {
+            @event = "messages.upsert",
+            instance = instanceName,
+            data = new
+            {
+                message = new
+                {
+                    key = new
+                    {
+                        remoteJid = remoteJid,
+                        id = Guid.NewGuid().ToString()
+                    },
+                    conversation = message,
+                    fromMe = false,
+                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                }
+            }
+        };
+
+        return new StringContent(
+            JsonSerializer.Serialize(payload),
+            System.Text.Encoding.UTF8,
+            "application/json");
+    }
 
     [Fact]
     public async Task Health_ReturnsOkWithBotCount()
     {
         using var factory = BuildFactory();
-        var client = factory.CreateClient();
-
-        var response = await client.GetAsync("/health");
-
+        var response = await factory.CreateClient().GetAsync("/health");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await response.Content.ReadFromJsonAsync<dynamic>();
-        body.Should().NotBeNull();
     }
-
-    // ─── /webhook ─────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task Webhook_WithMissingFields_ReturnsBadRequest()
     {
         using var factory = BuildFactory();
-        var client = factory.CreateClient();
-
-        var form = new FormUrlEncodedContent([]);
-        var response = await client.PostAsync("/webhook", form);
-
+        var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        var response = await factory.CreateClient().PostAsync("/webhook", content);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        _fakeSender.Sent.Should().BeEmpty();
+        _fakeProvider.Sent.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Webhook_WithUnknownTwilioNumber_ReturnsOkButDoesNotSend()
+    public async Task Webhook_WithUnknownWhatsAppNumber_ReturnsOkButDoesNotSend()
     {
         using var factory = BuildFactory();
-        var client = factory.CreateClient();
+        var payload = CreateEvolutionPayload(
+            instanceName: "99999",
+            remoteJid: "5521999@s.whatsapp.net",
+            message: "oi");
 
-        var form = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["From"] = "whatsapp:+5521999",
-            ["To"]   = "whatsapp:+99999", // número sem bot
-            ["Body"] = "oi"
-        });
-
-        var response = await client.PostAsync("/webhook", form);
-
+        var response = await factory.CreateClient().PostAsync("/webhook", payload);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        _fakeSender.Sent.Should().BeEmpty();
+        _fakeProvider.Sent.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Webhook_FlowMatch_SendsFlowResponseWithoutLlm()
     {
         using var factory = BuildFactory();
-        var client = factory.CreateClient();
+        var payload = CreateEvolutionPayload(
+            instanceName: "15005550006",
+            remoteJid: "5521999@s.whatsapp.net",
+            message: "oi tudo bem");
 
-        var form = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["From"] = "whatsapp:+5521999",
-            ["To"]   = "whatsapp:+15005550006",
-            ["Body"] = "oi tudo bem"
-        });
-
-        var response = await client.PostAsync("/webhook", form);
-
+        var response = await factory.CreateClient().PostAsync("/webhook", payload);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        _fakeSender.Sent.Should().ContainSingle(m =>
-            m.To == "whatsapp:+5521999" &&
-            m.From == "whatsapp:+15005550006" &&
-            m.Body == "Olá! Como posso ajudar?");
+        _fakeProvider.Sent.Should().ContainSingle(m =>
+            m.To == "5521999" &&
+            m.From == "15005550006" &&
+            m.Body == "Ola! Como posso ajudar?");
     }
 
     [Fact]
     public async Task Webhook_SetsCorrectToAndFromWhenReplying()
     {
         using var factory = BuildFactory();
-        var client = factory.CreateClient();
+        var payload = CreateEvolutionPayload(
+            instanceName: "15005550006",
+            remoteJid: "5521123456789@s.whatsapp.net",
+            message: "oi");
 
-        var form = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["From"] = "whatsapp:+5521123456789",
-            ["To"]   = "whatsapp:+15005550006",
-            ["Body"] = "oi"
-        });
-
-        await client.PostAsync("/webhook", form);
-
-        var sent = _fakeSender.Sent.Single();
-        sent.To.Should().Be("whatsapp:+5521123456789");   // responde para quem mandou
-        sent.From.Should().Be("whatsapp:+15005550006");   // enviado pelo número do bot
+        await factory.CreateClient().PostAsync("/webhook", payload);
+        _fakeProvider.Sent.Should().ContainSingle();
+        var sent = _fakeProvider.Sent[0];
+        sent.To.Should().Be("5521123456789");
+        sent.From.Should().Be("15005550006");
     }
 
     public void Dispose()
     {
         _dir.Dispose();
         Environment.SetEnvironmentVariable("GROQ_API_KEY", null);
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
     }
 }

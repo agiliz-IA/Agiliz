@@ -1,11 +1,11 @@
 namespace Agiliz.Core.Models;
 
-public sealed class BotConfig
+public sealed record BotConfig
 {
     public string TenantId { get; init; } = string.Empty;
 
-    /// <summary>Número Twilio no formato "whatsapp:+55..."</summary>
-    public string TwilioNumber { get; init; } = string.Empty;
+    /// <summary>Número WhatsApp no formato "+5511999999999" (apenas dígitos com país)</summary>
+    public string WhatsAppNumber { get; init; } = string.Empty;
 
     /// <summary>Instrução base do bot. Gerada pelo meta-agente.</summary>
     public string SystemPrompt { get; init; } = string.Empty;

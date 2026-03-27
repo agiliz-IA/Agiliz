@@ -10,13 +10,13 @@ public static class TestFixtures
 {
     public static BotConfig DefaultConfig(
         string tenantId = "test-bot",
-        string twilioNumber = "whatsapp:+15005550006",
+        string whatsappNumber = "15005550006",
         LlmProvider provider = LlmProvider.Groq,
         string? systemPrompt = null,
         List<FlowEntry>? flows = null) => new()
     {
         TenantId = tenantId,
-        TwilioNumber = twilioNumber,
+        WhatsAppNumber = whatsappNumber,
         SystemPrompt = systemPrompt ?? "Você é um assistente de testes.",
         Flows = flows ?? [],
         Llm = new LlmSettings
@@ -47,14 +47,14 @@ public static class TestFixtures
         var flowJson = flows is null ? "[]" : string.Join(",\n",
             flows.Select(f => $$"""{"trigger":"{{f.trigger}}","response":"{{f.response}}"}"""));
 
-        return $"""
+        return $$$"""
             Tenho tudo que preciso. Gerando configuração...
 
             ===JSON_START===
-            {{{{
-              "systemPrompt": "{systemPrompt}",
-              "flows": [{flowJson}]
-            }}}}
+            {
+              "systemPrompt": "{{{systemPrompt}}}",
+              "flows": [{{{flowJson}}}]
+            }
             ===JSON_END===
             """;
     }
@@ -62,14 +62,14 @@ public static class TestFixtures
     public static string AgentConfigReplyFormatted(
         string systemPrompt = "Você é a Lia.",
         string flowsJson = "[]") =>
-        $"""
+        $$$"""
         Tenho tudo que preciso. Gerando configuração...
 
         ===JSON_START===
-        {{
-          "systemPrompt": "{systemPrompt}",
-          "flows": {flowsJson}
-        }}
+        {
+          "systemPrompt": "{{{systemPrompt}}}",
+          "flows": {{{flowsJson}}}
+        }
         ===JSON_END===
         """;
 

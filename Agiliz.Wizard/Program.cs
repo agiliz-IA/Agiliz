@@ -43,11 +43,11 @@ app.MapGet("/api/bots", () =>
         try
         {
             var c = BotConfigLoader.Load(configsDir, id);
-            return new { c.TenantId, c.TwilioNumber, Provider = c.Llm.Provider.ToString(), FlowCount = c.Flows.Count, c.Llm.Model };
+            return new { c.TenantId, c.WhatsAppNumber, Provider = c.Llm.Provider.ToString(), FlowCount = c.Flows.Count, c.Llm.Model };
         }
         catch
         {
-            return new { TenantId = id, TwilioNumber = "erro", Provider = "-", FlowCount = 0, Model = "-" };
+            return new { TenantId = id, WhatsAppNumber = "erro", Provider = "-", FlowCount = 0, Model = "-" };
         }
     });
     return Results.Json(list, jsonOpts);
@@ -83,8 +83,9 @@ app.MapPost("/api/bots", async (HttpRequest req) =>
     var root = doc.RootElement;
 
     var tenantId = root.GetProperty("tenantId").GetString()!.Trim().ToLower().Replace(" ", "-");
-    var twilioNumber = root.GetProperty("twilioNumber").GetString()!;
-    if (!twilioNumber.StartsWith("whatsapp:+")) twilioNumber = $"whatsapp:{twilioNumber}";
+    var whatsappNumber = root.GetProperty("whatsappNumber").GetString()!;
+    // Remove any non-digits
+    whatsappNumber = System.Text.RegularExpressions.Regex.Replace(whatsappNumber, @"\D", "");
 
     var providerStr = root.GetProperty("provider").GetString()!;
     var provider = providerStr == "Claude" ? LlmProvider.Claude : LlmProvider.Groq;
@@ -104,7 +105,7 @@ app.MapPost("/api/bots", async (HttpRequest req) =>
     var config = new BotConfig
     {
         TenantId = tenantId,
-        TwilioNumber = twilioNumber,
+        WhatsAppNumber = whatsappNumber,
         SystemPrompt = systemPrompt,
         Flows = flows,
         Llm = new LlmSettings { Provider = provider, Model = model, MaxTokens = maxTokens }
@@ -220,3 +221,6 @@ app.MapDelete("/api/sessions/{id}", (Guid id) =>
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+// Exposes Program to WebApplicationFactory in tests
+namespace Agiliz.Wizard { public partial class Program { } }

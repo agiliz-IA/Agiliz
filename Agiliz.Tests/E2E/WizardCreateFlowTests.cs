@@ -97,7 +97,7 @@ public sealed class WizardCreateFlowTests : IAsyncLifetime
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tenantId: 'ui-test-bot',
-                    twilioNumber: 'whatsapp:+15005550006',
+                    whatsappNumber: '15005550006',
                     provider: 'Groq',
                     systemPrompt: 'Bot de teste.',
                     flows: [{ trigger: 'oi', response: 'Olá!' }],
