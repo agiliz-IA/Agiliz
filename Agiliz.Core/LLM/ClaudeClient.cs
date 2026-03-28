@@ -29,6 +29,7 @@ public sealed class ClaudeClient : ILlmClient
 
     public async Task<string> CompleteAsync(
         IReadOnlyList<ConversationMessage> history,
+        IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null,
         CancellationToken ct = default)
     {
         var messages = history.Select(m => new

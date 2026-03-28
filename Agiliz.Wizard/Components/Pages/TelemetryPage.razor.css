@@ -1,0 +1,69 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.page-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.wizard-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px;
+}
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.telemetry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.telemetry-table th {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.telemetry-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.td-time {
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+
+.bot-label {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.td-mono {
+  font-family: var(--mono);
+  font-size: 11px;
+}

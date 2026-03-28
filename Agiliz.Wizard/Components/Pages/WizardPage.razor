@@ -1,0 +1,274 @@
+@page "/create"
+@page "/edit/{TenantIdParam}"
+@using Agiliz.Wizard.Services
+@using Agiliz.Wizard.Components.Atoms
+@using System.Text.Json
+@using Agiliz.Core.Config
+@using Agiliz.Core.Models
+@inject WizardSessionStore SessionStore
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">@(IsEdit ? $"editando: {TenantIdParam}" : "novo bot")</div>
+        <div class="page-sub">@(IsEdit ? "altere o que precisar via entrevista" : "siga os passos para configurar")</div>
+    </div>
+</div>
+
+<div class="wizard-content">
+    
+    <!-- STEP 1: Basic Settings -->
+    <div class="wizard-step @(_step == 1 ? "active" : (_step > 1 ? "done" : ""))">
+        <div class="step-header">
+            <div class="step-number">1</div>
+            <div>
+                <h3>Identificação</h3>
+                <p>Crie um ID único e associe o número da Evolution API.</p>
+            </div>
+        </div>
+        
+        @if (_step == 1)
+        {
+            <div class="step-body form-card">
+                <AgilizInput Label="Tenant ID" Placeholder="exemplo_vendas" @bind-Value="_tenantId" />
+                <AgilizInput Label="Número WhatsApp" Placeholder="5511999999999" @bind-Value="_whatsAppNumber" />
+                <div class="step-actions">
+                    <AgilizButton Variant="primary" OnClick="StartInterview" Disabled="_isLoading">Próximo passo</AgilizButton>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- STEP 2: Entrevista -->
+    <div class="wizard-step @(_step == 2 ? "active" : (_step > 2 ? "done" : ""))" style="opacity: @(_step >= 2 ? 1 : 0.5);">
+        <div class="step-header">
+            <div class="step-number">2</div>
+            <div>
+                <h3>Entrevista Agiliz</h3>
+                <p>Nossa IA meta-agente vai entender o comportamento desejado.</p>
+            </div>
+        </div>
+        
+        @if (_step == 2)
+        {
+            <div class="step-body chat-container">
+                <div class="chat-grid">
+                    <div class="chat-history" id="wizard-chat">
+                        @foreach (var msg in _messages)
+                        {
+                            <div class="chat-row @(msg.Role == "user" ? "user-row" : "agent-row")">
+                                <div class="bubble-label">@(msg.Role == "user" ? "Você" : "Agiliz")</div>
+                                <div class="chat-bubble @msg.Role">
+                                    @((MarkupString)msg.HtmlContent)
+                                </div>
+                            </div>
+                        }
+                        @if (_isTyping)
+                        {
+                            <div class="chat-row agent-row">
+                                <div class="typing-indicator">
+                                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea class="chat-textarea" placeholder="Descreva o bot..." 
+                                  @bind="_chatInput" @bind:event="oninput" @onkeyup="HandleKeyUp"></textarea>
+                        <AgilizButton Variant="primary" OnClick="SendChatMessage" Disabled="_isTyping || string.IsNullOrWhiteSpace(_chatInput)">Enviar</AgilizButton>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- STEP 3: Confirmação -->
+    <div class="wizard-step @(_step == 3 ? "active" : "")" style="opacity: @(_step == 3 ? 1 : 0.5);">
+        <div class="step-header">
+            <div class="step-number">3</div>
+            <div>
+                <h3>Revisão e Engine</h3>
+                <p>Confirme os fluxos extraídos e escolha o provedor de inferência do bot.</p>
+            </div>
+        </div>
+        
+        @if (_step == 3)
+        {
+            <div class="step-body form-card">
+                <div class="form-group provider-group">
+                    <label class="provider-option @(_provider == "Groq" ? "selected" : "")" @onclick='() => _provider = "Groq"'>
+                        <input type="radio" value="Groq" checked="@(_provider == "Groq")" />
+                        Llama 3 (Groq - Rápido)
+                    </label>
+                    <label class="provider-option @(_provider == "Claude" ? "selected" : "")" @onclick='() => _provider = "Claude"'>
+                        <input type="radio" value="Claude" checked="@(_provider == "Claude")" />
+                        Claude Sonnet (Mais inteligente)
+                    </label>
+                </div>
+                
+                <div class="config-preview">
+                    @_jsonPreview
+                </div>
+                
+                <div class="step-actions">
+                    <AgilizButton Variant="ghost" OnClick='() => _step = 2'>Voltar</AgilizButton>
+                    <AgilizButton Variant="primary" OnClick="SaveBot">Salvar Bot e Lançar</AgilizButton>
+                </div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public string? TenantIdParam { get; set; }
+    private bool IsEdit => !string.IsNullOrEmpty(TenantIdParam);
+
+    private int _step = 1;
+    private string _tenantId = "";
+    private string _whatsAppNumber = "";
+    private bool _isLoading;
+
+    private string _sessionId = "";
+    private string _chatInput = "";
+    private bool _isTyping;
+    private List<ChatMessage> _messages = new();
+
+    private string _provider = "Groq";
+    private BotConfig? _extractedConfig;
+    private string _jsonPreview = "";
+
+    protected override void OnInitialized()
+    {
+        if (IsEdit)
+        {
+            _tenantId = TenantIdParam!;
+            
+            // Tentativa de carregar config antiga para pegar numero
+            try {
+                var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+                var config = BotConfigLoader.Load(dir, _tenantId);
+                _whatsAppNumber = config.WhatsAppNumber;
+            } catch {}
+        }
+    }
+
+    private async Task StartInterview()
+    {
+        if (string.IsNullOrWhiteSpace(_tenantId) || string.IsNullOrWhiteSpace(_whatsAppNumber))
+        {
+            await JS.InvokeVoidAsync("toast", "Preencha o tenant ID e o número.", "error");
+            return;
+        }
+
+        _isLoading = true;
+        
+        // Mocking the behavior of POST /api/sessions
+        var session = SessionStore.Create(IsEdit ? "edit" : "create");
+        _sessionId = session.Id.ToString();
+        
+        var greetingHtml = await JS.InvokeAsync<string>("formatWhatsApp", "Olá! Sou o assistente de configuração Agiliz. Me fale um pouco sobre o negócio (nome e ramo) para começarmos.");
+
+        _messages.Add(new ChatMessage { Role = "agent", HtmlContent = greetingHtml });
+        
+        _step = 2;
+        _isLoading = false;
+        
+        await Task.Delay(50);
+        await JS.InvokeVoidAsync("scrollToBottom", "wizard-chat");
+    }
+
+    private async Task SendChatMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_chatInput) || string.IsNullOrEmpty(_sessionId)) return;
+
+        var text = _chatInput;
+        _chatInput = "";
+        
+        var userHtml = await JS.InvokeAsync<string>("formatWhatsApp", text);
+        _messages.Add(new ChatMessage { Role = "user", HtmlContent = userHtml });
+        
+        _isTyping = true;
+        await Task.Delay(50);
+        await JS.InvokeVoidAsync("scrollToBottom", "wizard-chat");
+
+        var session = SessionStore.Get(Guid.Parse(_sessionId));
+        if (session == null) return;
+
+        var replyContext = await SessionStore.SendAsync(Guid.Parse(_sessionId), text);
+        
+        _isTyping = false;
+        var agentHtml = await JS.InvokeAsync<string>("formatWhatsApp", replyContext.Reply);
+        _messages.Add(new ChatMessage { Role = "agent", HtmlContent = agentHtml });
+
+        if (replyContext.ConfigReady && !string.IsNullOrEmpty(replyContext.JsonConfig))
+        {
+            _extractedConfig = JsonSerializer.Deserialize<BotConfig>(replyContext.JsonConfig, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            GoToConfirm();
+        }
+
+        await Task.Delay(50);
+        await JS.InvokeVoidAsync("scrollToBottom", "wizard-chat");
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendChatMessage();
+        }
+    }
+
+    private void GoToConfirm()
+    {
+        if (_extractedConfig != null)
+        {
+            var preview = new {
+                tenantId = _tenantId,
+                whatsappNumber = _whatsAppNumber,
+                provider = _provider,
+                systemPrompt = _extractedConfig.SystemPrompt,
+                flows = _extractedConfig.Flows,
+                llm = new { model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-sonnet-4", maxTokens = 300 }
+            };
+            
+            _jsonPreview = JsonSerializer.Serialize(preview, new JsonSerializerOptions { WriteIndented = true });
+        }
+        
+        _step = 3;
+    }
+
+    private async Task SaveBot()
+    {
+        if (_extractedConfig == null) return;
+        
+        var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        
+        var finalConfig = new BotConfig
+        {
+            TenantId = _tenantId,
+            WhatsAppNumber = _whatsAppNumber,
+            SystemPrompt = _extractedConfig.SystemPrompt,
+            Flows = _extractedConfig.Flows,
+            Llm = new LlmSettings { 
+                Provider = Enum.Parse<LlmProvider>(_provider, true), 
+                Model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-3-5-sonnet-20241022",
+                MaxTokens = 300
+            }
+        };
+
+        BotConfigLoader.Save(dir, finalConfig);
+        await JS.InvokeVoidAsync("toast", $"Bot {_tenantId} salvo com sucesso!", "success");
+        SessionStore.Remove(Guid.Parse(_sessionId));
+        
+        NavManager.NavigateTo("/");
+    }
+
+    private class ChatMessage
+    {
+        public string Role { get; set; } = "";
+        public string HtmlContent { get; set; } = "";
+    }
+}

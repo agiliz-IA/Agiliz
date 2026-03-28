@@ -1,0 +1,22 @@
+<button class="btn @BtnClass" disabled="@Disabled" @onclick="OnClick" type="@Type">
+    @if (ChildContent != null)
+    {
+        @ChildContent
+    }
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public bool Disabled { get; set; } = false;
+    [Parameter] public string Type { get; set; } = "button";
+    
+    /// <summary>
+    /// primary | ghost | danger | teal
+    /// </summary>
+    [Parameter] public string Variant { get; set; } = "primary";
+    
+    [Parameter] public bool Small { get; set; } = false;
+
+    private string BtnClass => $"btn-{Variant} {(Small ? "btn-sm" : "")}";
+}

@@ -12,11 +12,15 @@ var configsDir = builder.Configuration["ConfigsDir"]
 builder.Services.AddSingleton<WizardSessionStore>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+builder.Services.AddAntiforgery();
+
 var app = builder.Build();
 
 app.UseCors();
-app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseAntiforgery();
 
 // ─── Session purge timer ──────────────────────────────────────────────────────
 var store = app.Services.GetRequiredService<WizardSessionStore>();
@@ -150,6 +154,48 @@ app.MapPost("/api/bots/{id}/test", async (string id, HttpRequest req) =>
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TELEMETRY (Armazenamento Simples)
+// ═══════════════════════════════════════════════════════════════════════════════
+var telemetryPath = Path.Combine(configsDir, "telemetry.json");
+
+app.MapGet("/api/telemetry", () =>
+{
+    if (!File.Exists(telemetryPath)) return Results.Json(new object[] { }, jsonOpts);
+    var json = File.ReadAllText(telemetryPath);
+    return Results.Content(json, "application/json");
+});
+
+app.MapPost("/api/telemetry", async (HttpRequest req) =>
+{
+    using var doc = await JsonDocument.ParseAsync(req.Body);
+    var root = doc.RootElement;
+    var entry = new
+    {
+        Timestamp = DateTimeOffset.UtcNow,
+        Bot = root.TryGetProperty("bot", out var b) ? b.GetString() : "unknown",
+        To = root.TryGetProperty("to", out var t) ? t.GetString() : "",
+        Subject = root.TryGetProperty("subject", out var s) ? s.GetString() : "",
+        Status = root.TryGetProperty("status", out var st) ? st.GetString() : "unknown"
+    };
+
+    var list = new List<object>();
+    if (File.Exists(telemetryPath))
+    {
+        try
+        {
+            var existing = File.ReadAllText(telemetryPath);
+            if (!string.IsNullOrWhiteSpace(existing))
+                list = JsonSerializer.Deserialize<List<object>>(existing, jsonOpts) ?? new List<object>();
+        }
+        catch { /* ignora erro de parse */ }
+    }
+    
+    list.Add(entry);
+    File.WriteAllText(telemetryPath, JsonSerializer.Serialize(list, jsonOpts));
+    return Results.Ok();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SESSIONS (meta-agente)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -218,7 +264,8 @@ app.MapDelete("/api/sessions/{id}", (Guid id) =>
 });
 
 // ─── SPA fallback ─────────────────────────────────────────────────────────────
-app.MapFallbackToFile("index.html");
+app.MapRazorComponents<Agiliz.Wizard.Components.App>()
+   .AddInteractiveServerRenderMode();
 
 app.Run();
 

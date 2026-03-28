@@ -603,6 +603,11 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 </style>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script type="text/javascript">
+  // Configuração global do EmailJS se a Public Key for fornecida. Caso contrário será setada via UI.
+  // emailjs.init("YOUR_PUBLIC_KEY");
+</script>
 </head>
 <body>
 
@@ -619,6 +624,18 @@ body {
         <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
       </svg>
       Dashboard
+    </button>
+    <button class="nav-item" id="nav-telemetry" onclick="navigate('telemetry')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 14h12M4 14V8m4 6V4m4 10v-6"></path>
+      </svg>
+      Telemetria
+    </button>
+    <button class="nav-item" id="nav-email" onclick="navigate('email')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4l6 4 6-4M2 4v8h12V4H2z"></path>
+      </svg>
+      Disparar E-mail
     </button>
     <button class="nav-item" id="nav-create" onclick="navigate('create')">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -648,6 +665,78 @@ body {
       </button>
     </div>
     <div id="bots-grid" class="bots-grid"></div>
+  </div>
+
+  <!-- Telemetry View -->
+  <div class="view" id="view-telemetry">
+    <div class="page-header">
+      <div>
+        <div class="page-title">telemetria de disparo</div>
+        <div class="page-sub">histórico de e-mails enviados pelos robôs</div>
+      </div>
+    </div>
+    <div class="wizard-content">
+      <div class="form-card" style="max-width: 100%;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--border); color: var(--text-2);">
+              <th style="padding: 10px;">Data/Hora</th>
+              <th style="padding: 10px;">Bot</th>
+              <th style="padding: 10px;">Destinatário</th>
+              <th style="padding: 10px;">Assunto</th>
+              <th style="padding: 10px;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="telemetry-table-body">
+            <tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-3);">Carregando histórico...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- EmailJS Manual View -->
+  <div class="view" id="view-email">
+    <div class="page-header">
+      <div>
+        <div class="page-title">disparo manual de e-mail</div>
+        <div class="page-sub">use a infraestrutura front-end via EmailJS</div>
+      </div>
+    </div>
+    <div class="wizard-content">
+      <div class="form-card">
+        <div class="form-group" style="display: flex; gap: 10px;">
+          <div style="flex:1">
+            <label class="form-label">Service ID (EmailJS)</label>
+            <input id="eml-service-id" class="form-input" type="text" placeholder="service_..." />
+          </div>
+          <div style="flex:1">
+            <label class="form-label">Template ID (EmailJS)</label>
+            <input id="eml-template-id" class="form-input" type="text" placeholder="template_..." />
+          </div>
+          <div style="flex:1">
+            <label class="form-label">Public Key (EmailJS)</label>
+            <input id="eml-public-key" class="form-input" type="password" placeholder="Key..." />
+          </div>
+        </div>
+        <div class="step-line" style="margin: 24px 0;"></div>
+        <div class="form-group">
+          <label class="form-label">Destinatário</label>
+          <input id="eml-to" class="form-input" type="email" placeholder="email@exemplo.com" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assunto</label>
+          <input id="eml-subject" class="form-input" type="text" placeholder="Confirmação de Atendimento" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mensagem</label>
+          <textarea id="eml-message" class="form-input" rows="5" placeholder="Sua mensagem aqui..."></textarea>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn-primary" onclick="sendManualEmail()">Enviar E-mail via Browser</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Wizard Create/Edit -->
@@ -811,6 +900,8 @@ function navigate(view, params = {}) {
   if (view === 'dashboard') loadDashboard();
   if (view === 'create') initWizard(params.mode || 'create', params.tenantId || null);
   if (view === 'test') initTest(params.tenantId);
+  if (view === 'telemetry') loadTelemetry();
+  if (view === 'email') initEmailView();
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -1042,6 +1133,80 @@ async function sendTestMessage() {
   if (state.testHistory.length > 10) state.testHistory.splice(0, 2);
 
   input.focus();
+}
+
+// ─── Telemetry & EmailJS ──────────────────────────────────────────────────────
+async function loadTelemetry() {
+  const tbody = document.getElementById('telemetry-table-body');
+  tbody.innerHTML = '<tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-3);">Carregando histórico...</td></tr>';
+  
+  const data = await api('/api/telemetry');
+  
+  if (!data || data.length === 0) {
+     tbody.innerHTML = '<tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-3);">Nenhum envio registrado.</td></tr>';
+     return;
+  }
+  
+  tbody.innerHTML = data.reverse().map(h => `
+     <tr style="border-bottom: 1px solid var(--border);">
+       <td style="padding: 10px; color: var(--text-3); font-family: var(--mono);">${new Date(h.timestamp).toLocaleString()}</td>
+       <td style="padding: 10px;"><span style="color:var(--accent);font-family:var(--mono);font-size:11px;">${escapeHtml(h.bot)}</span></td>
+       <td style="padding: 10px; font-family: var(--mono); font-size: 11px;">${escapeHtml(h.to)}</td>
+       <td style="padding: 10px; font-size: 12px;">${escapeHtml(h.subject)}</td>
+       <td style="padding: 10px;">
+          <span class="badge ${h.status === 'success' ? 'badge-flow' : 'badge-groq'}">${escapeHtml(h.status)}</span>
+       </td>
+     </tr>
+  `).join('');
+}
+
+function initEmailView() {
+  document.getElementById('eml-service-id').value = localStorage.getItem('eml-service-id') || '';
+  document.getElementById('eml-template-id').value = localStorage.getItem('eml-template-id') || '';
+  document.getElementById('eml-public-key').value = localStorage.getItem('eml-public-key') || '';
+  
+  ['eml-service-id', 'eml-template-id', 'eml-public-key'].forEach(id => {
+      document.getElementById(id).addEventListener('change', e => localStorage.setItem(id, e.target.value));
+  });
+}
+
+async function sendManualEmail() {
+  const serviceId = document.getElementById('eml-service-id').value.trim();
+  const templateId = document.getElementById('eml-template-id').value.trim();
+  const publicKey = document.getElementById('eml-public-key').value.trim();
+  const to = document.getElementById('eml-to').value.trim();
+  const subject = document.getElementById('eml-subject').value.trim();
+  const message = document.getElementById('eml-message').value.trim();
+
+  if(!serviceId || !templateId || !publicKey || !to) {
+     toast('Preencha as credenciais e o Destinatário.', 'error');
+     return;
+  }
+  if(!window.emailjs) {
+     toast('EmailJS SDK não foi carregado.', 'error');
+     return;
+  }
+  
+  emailjs.init(publicKey);
+  const btn = document.querySelector('#view-email .btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  
+  try {
+     await emailjs.send(serviceId, templateId, { to_email: to, subject: subject, message: message });
+     toast('E-mail enviado com sucesso via EmailJS!', 'success');
+     await api('/api/telemetry', 'POST', { bot: 'painel-admin', to, subject, status: 'success' });
+     document.getElementById('eml-to').value = '';
+     document.getElementById('eml-subject').value = '';
+     document.getElementById('eml-message').value = '';
+  } catch(e) {
+     console.error(e);
+     toast('Falha ao enviar e-mail via EmailJS.', 'error');
+     await api('/api/telemetry', 'POST', { bot: 'painel-admin', to, subject, status: 'error' });
+  } finally {
+     btn.disabled = false;
+     btn.textContent = 'Enviar E-mail via Browser';
+  }
 }
 
 // ─── Chat utils ───────────────────────────────────────────────────────────────

@@ -1,0 +1,88 @@
+@page "/telemetry"
+@using System.Text.Json
+@using Agiliz.Wizard.Components.Atoms
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+
+<div class="page-header">
+    <div>
+        <div class="page-title">telemetria de disparo</div>
+        <div class="page-sub">histórico de e-mails enviados pelos robôs</div>
+    </div>
+</div>
+
+<div class="wizard-content">
+    <div class="form-card" style="max-width: 100%;">
+        <table class="telemetry-table">
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Bot</th>
+                    <th>Destinatário</th>
+                    <th>Assunto</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_records == null)
+                {
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-3);">Carregando histórico...</td></tr>
+                }
+                else if (_records.Count == 0)
+                {
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-3);">Nenhum envio registrado.</td></tr>
+                }
+                else
+                {
+                    @foreach (var r in _records.AsEnumerable().Reverse())
+                    {
+                        <tr>
+                            <td class="td-time">@r.Timestamp.ToLocalTime().ToString("g")</td>
+                            <td><span class="bot-label">@r.Bot</span></td>
+                            <td class="td-mono">@r.To</td>
+                            <td>@r.Subject</td>
+                            <td>
+                                <AgilizBadge Text="@r.Status" ColorType="@(r.Status == "success" ? "flow" : "groq")" />
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<TelemetryRecord>? _records;
+
+    protected override void OnInitialized()
+    {
+        var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        var path = Path.Combine(dir, "telemetry.json");
+
+        if (!File.Exists(path))
+        {
+            _records = new List<TelemetryRecord>();
+            return;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            _records = JsonSerializer.Deserialize<List<TelemetryRecord>>(json, opts) ?? new List<TelemetryRecord>();
+        }
+        catch
+        {
+            _records = new List<TelemetryRecord>();
+        }
+    }
+
+    private class TelemetryRecord
+    {
+        public DateTimeOffset Timestamp { get; set; }
+        public string Bot { get; set; } = "";
+        public string To { get; set; } = "";
+        public string Subject { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+}

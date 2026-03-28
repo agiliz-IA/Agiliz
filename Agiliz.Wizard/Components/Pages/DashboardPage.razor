@@ -1,0 +1,91 @@
+@page "/"
+@using Agiliz.Core.Config
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject NavigationManager NavManager
+
+<div class="page-header">
+    <div>
+        <div class="page-title">bots ativos</div>
+        <div class="page-sub">gerencie e teste seus bots WhatsApp</div>
+    </div>
+    <AgilizButton Variant="primary" OnClick='() => NavManager.NavigateTo("/create")'>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" />
+        </svg>
+        Novo Bot
+    </AgilizButton>
+</div>
+
+<div class="bots-grid">
+    @if (_bots == null)
+    {
+        <div style="color:var(--text-3);font-size:13px;padding:8px;">carregando...</div>
+    }
+    else if (!_bots.Any())
+    {
+        <div class="empty-state" style="grid-column:1/-1">
+            <div class="empty-state-icon">&gt;_</div>
+            <p>Nenhum bot configurado ainda.</p>
+            <AgilizButton Variant="primary" OnClick='() => NavManager.NavigateTo("/create")'>Criar primeiro bot</AgilizButton>
+        </div>
+    }
+    else
+    {
+        @foreach (var b in _bots)
+        {
+            <div class="bot-card" @key="b.TenantId">
+                <div class="bot-card-id">@b.TenantId</div>
+                <div class="bot-card-meta">
+                    <AgilizBadge Text="@b.Provider" ColorType="@(b.Provider.ToLower())" />
+                    <span class="bot-card-flows">@b.FlowCount flow@(b.FlowCount != 1 ? "s" : "")</span>
+                </div>
+                <div class="bot-card-number">@b.WhatsAppNumber</div>
+                <div class="bot-card-actions">
+                    <AgilizButton Variant="teal" Small="true" OnClick='() => NavManager.NavigateTo($"/test/{b.TenantId}")'>▶ Testar</AgilizButton>
+                    <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo($"/edit/{b.TenantId}")'>Editar</AgilizButton>
+                    <AgilizButton Variant="danger" Small="true" OnClick='() => DeleteBot(b.TenantId)'>Deletar</AgilizButton>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _configsDir = "";
+    private List<BotViewModel>? _bots;
+
+    protected override void OnInitialized()
+    {
+        _configsDir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        LoadBots();
+    }
+
+    private void LoadBots()
+    {
+        var tenants = BotConfigLoader.ListTenants(_configsDir);
+        _bots = tenants.Select(id =>
+        {
+            try
+            {
+                var c = BotConfigLoader.Load(_configsDir, id);
+                return new BotViewModel(c.TenantId, c.WhatsAppNumber, c.Llm.Provider.ToString(), c.Flows.Count);
+            }
+            catch
+            {
+                return new BotViewModel(id, "erro", "-", 0);
+            }
+        }).ToList();
+    }
+
+    private void DeleteBot(string id)
+    {
+        var path = Path.Combine(_configsDir, $"{id}.json");
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+            LoadBots();
+        }
+    }
+
+    private record BotViewModel(string TenantId, string WhatsAppNumber, string Provider, int FlowCount);
+}

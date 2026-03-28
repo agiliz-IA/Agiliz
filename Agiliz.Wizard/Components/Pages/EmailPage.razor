@@ -1,0 +1,137 @@
+@page "/email"
+@using System.Text.Json
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+
+<div class="page-header">
+    <div>
+        <div class="page-title">disparo manual de e-mail</div>
+        <div class="page-sub">use a infraestrutura front-end via EmailJS ou SmtpBackend</div>
+    </div>
+</div>
+
+<div class="wizard-content">
+    <div class="form-card" style="max-width: 600px;">
+        <div style="display: flex; gap: 10px;">
+            <div style="flex:1">
+                <AgilizInput Label="Service ID (EmailJS)" Placeholder="service_..." @bind-Value="_serviceId" />
+            </div>
+            <div style="flex:1">
+                <AgilizInput Label="Template ID (EmailJS)" Placeholder="template_..." @bind-Value="_templateId" />
+            </div>
+            <div style="flex:1">
+                <AgilizInput Label="Public Key (EmailJS)" Type="password" Placeholder="Key..." @bind-Value="_publicKey" />
+            </div>
+        </div>
+        
+        <div class="step-line" style="margin: 24px 0;"></div>
+        
+        <AgilizInput Label="Destinatário" Type="email" Placeholder="email@exemplo.com" @bind-Value="_to" />
+        <AgilizInput Label="Assunto" Placeholder="Confirmação de Atendimento" @bind-Value="_subject" />
+        
+        <AgilizTextarea Label="Mensagem" Rows="5" Placeholder="Sua mensagem aqui..." @bind-Value="_message" />
+        
+        <div class="step-actions">
+            <AgilizButton Variant="primary" Disabled="@_isSending" OnClick="SendEmail">
+                @(_isSending ? "Enviando..." : "Enviar E-mail via Browser")
+            </AgilizButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _serviceId = "";
+    private string _templateId = "";
+    private string _publicKey = "";
+    
+    private string _to = "";
+    private string _subject = "";
+    private string _message = "";
+    
+    private bool _isSending;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _serviceId = await JS.InvokeAsync<string>("localStorage.getItem", "eml-service-id") ?? "";
+            _templateId = await JS.InvokeAsync<string>("localStorage.getItem", "eml-template-id") ?? "";
+            _publicKey = await JS.InvokeAsync<string>("localStorage.getItem", "eml-public-key") ?? "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task SendEmail()
+    {
+        if (string.IsNullOrWhiteSpace(_serviceId) || string.IsNullOrWhiteSpace(_templateId) || string.IsNullOrWhiteSpace(_publicKey) || string.IsNullOrWhiteSpace(_to))
+        {
+            await ShowToast("Preencha as credenciais e o Destinatário.", "error");
+            return;
+        }
+
+        _isSending = true;
+        
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "eml-service-id", _serviceId);
+            await JS.InvokeVoidAsync("localStorage.setItem", "eml-template-id", _templateId);
+            await JS.InvokeVoidAsync("localStorage.setItem", "eml-public-key", _publicKey);
+
+            await JS.InvokeVoidAsync("emailjs.init", _publicKey);
+            await JS.InvokeVoidAsync("emailjs.send", _serviceId, _templateId, new { to_email = _to, subject = _subject, message = _message });
+            
+            await ShowToast("E-mail enviado com sucesso via EmailJS!", "success");
+            await SaveTelemetry("success");
+            
+            _to = "";
+            _subject = "";
+            _message = "";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            await ShowToast("Falha ao enviar e-mail via EmailJS.", "error");
+            await SaveTelemetry("error");
+        }
+        finally
+        {
+            _isSending = false;
+        }
+    }
+
+    private async Task SaveTelemetry(string status)
+    {
+        try
+        {
+            var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            var path = Path.Combine(dir, "telemetry.json");
+
+            var entry = new
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                Bot = "painel-admin",
+                To = _to,
+                Subject = _subject,
+                Status = status
+            };
+
+            var list = new List<object>();
+            if (File.Exists(path))
+            {
+                var existing = await File.ReadAllTextAsync(path);
+                if (!string.IsNullOrWhiteSpace(existing))
+                    list = JsonSerializer.Deserialize<List<object>>(existing, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<object>();
+            }
+            
+            list.Add(entry);
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(list));
+        }
+        catch { /* fail silently */ }
+    }
+
+    private async Task ShowToast(string message, string type)
+    {
+        // Simple manual JS eval for toast if not wrapped in C# yet
+        await JS.InvokeVoidAsync("eval", $"toast('{message}', '{type}')");
+    }
+}

@@ -89,7 +89,7 @@ public sealed class WizardSessionStore
         session.History.Add(ConversationMessage.User(message));
         session.LastActivity = DateTimeOffset.UtcNow;
 
-        var reply = await session.LlmClient.CompleteAsync(session.History, ct);
+        var reply = await session.LlmClient.CompleteAsync(session.History, null, ct);
         session.History.Add(ConversationMessage.Assistant(reply));
 
         var configReady = reply.Contains("===JSON_START===") && reply.Contains("===JSON_END===");

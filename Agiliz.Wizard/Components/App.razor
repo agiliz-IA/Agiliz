@@ -1,0 +1,55 @@
+@using Microsoft.AspNetCore.Components.Web
+@using Agiliz.Wizard.Components
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agiliz — Wizard</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Base styles that stay global -->
+    <link href="app.css" rel="stylesheet" />
+    <link href="Agiliz.Wizard.styles.css" rel="stylesheet" />
+
+    <HeadOutlet />
+</head>
+<body>
+    <Routes @rendermode="RenderMode.InteractiveServer" />
+    
+    <script src="_framework/blazor.web.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@@emailjs/browser@4/dist/email.min.js"></script>
+    <script>
+        window.toast = function(msg, type = 'success') {
+          const container = document.getElementById('toasts');
+          const el = document.createElement('div');
+          el.className = `toast toast-${type}`;
+          el.textContent = msg;
+          container.appendChild(el);
+          setTimeout(() => el.remove(), 3500);
+        }
+        window.scrollToBottom = function(id) {
+          const el = document.getElementById(id);
+          if(el) el.scrollTop = el.scrollHeight;
+        }
+        window.formatWhatsApp = function(raw) {
+          let s = String(raw).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          s = s.replace(/```([\s\S]*?)```/g, (_, c) => '<pre>' + c.trim() + '</pre>');
+          s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+          s = s.replace(/\*([^\*\n]+)\*/g, '<b>$1</b>');
+          s = s.replace(/\_([^\_\n]+)\_/g, '<i>$1</i>');
+          s = s.replace(/~([^~\n]+)~/g, '<s>$1</s>');
+          s = s.replace(/([^>])\n/g, '$1<br>');
+          return s;
+        }
+    </script>
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+</body>
+</html>

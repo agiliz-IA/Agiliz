@@ -24,6 +24,10 @@ builder.Services.AddSingleton<BotRunner>();
 builder.Services.AddSingleton<IMessageProvider, EvolutionClient>();
 builder.Services.AddHostedService<SessionPurgeService>();
 
+// Tools
+builder.Services.AddSingleton<Agiliz.Core.Tools.IEmailSender, Agiliz.Core.Tools.SmtpEmailSender>();
+builder.Services.AddSingleton<Agiliz.Core.Tools.ITool, Agiliz.Core.Tools.SendEmailTool>();
+
 // ─── Build ────────────────────────────────────────────────────────────────────
 var app = builder.Build();
 

@@ -16,7 +16,7 @@ public sealed class BotRunnerTests
 
     public BotRunnerTests()
     {
-        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance);
+        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance, Array.Empty<Agiliz.Core.Tools.ITool>());
     }
 
     private TenantEntry Tenant(BotConfig config) => new(config, _llm);

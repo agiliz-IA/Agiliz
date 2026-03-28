@@ -1,0 +1,161 @@
+@page "/test/{TenantId}"
+@using Agiliz.Core.Config
+@using Agiliz.Core.Models
+@using Agiliz.Core.LLM
+@using Agiliz.Wizard.Components.Atoms
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">testar bot</div>
+        <div class="page-sub">teste de fluxo estático e conversacional para <span style="color:var(--accent)">@TenantId</span></div>
+    </div>
+</div>
+
+<div class="wizard-content">
+    <div class="chat-container">
+        <div class="chat-grid">
+            <div class="chat-history" id="test-chat">
+                @foreach (var msg in _messages)
+                {
+                    @if (msg.Role == "flow-match")
+                    {
+                        <div class="chat-row agent-row">
+                            <div class="flow-badge-inline">⚡ @msg.Label</div>
+                            <div class="chat-bubble flow-match">@((MarkupString)msg.HtmlContent)</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="chat-row @(msg.Role == "user" ? "user-row" : "agent-row")">
+                            <div class="bubble-label">@(msg.Role == "user" ? "Você" : msg.Role == "agent" ? "Bot" : msg.Role)</div>
+                            <div class="chat-bubble @msg.Role">@((MarkupString)msg.HtmlContent)</div>
+                        </div>
+                    }
+                }
+                
+                @if (_isTyping)
+                {
+                    <div class="chat-row agent-row">
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+            
+            <div class="chat-input-area">
+                <textarea class="chat-textarea" placeholder="Digite uma mensagem..." 
+                          @bind="_chatInput" @bind:event="oninput" @onkeyup="HandleKeyUp"></textarea>
+                <AgilizButton Variant="teal" OnClick="SendMessage" Disabled="_isTyping || string.IsNullOrWhiteSpace(_chatInput)">Enviar</AgilizButton>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string TenantId { get; set; } = "";
+    
+    private BotConfig? _config;
+    private string _chatInput = "";
+    private bool _isTyping;
+    
+    // Internal state
+    private List<ChatMessage> _messages = new();
+    private List<ConversationMessage> _contextHistory = new();
+    private ILlmClient? _llm;
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            _config = BotConfigLoader.Load(dir, TenantId);
+            _llm = LlmClientFactory.Create(_config, new HttpClient());
+            
+            _messages.Add(new ChatMessage { Role = "agent", HtmlContent = $"Sessão de teste para <b>[{TenantId}]</b> iniciada. Digite uma mensagem como usuário." });
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage { Role = "agent", HtmlContent = $"Erro ao carregar bot: {ex.Message}" });
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_chatInput) || _config == null || _llm == null) return;
+
+        var text = _chatInput;
+        _chatInput = "";
+        
+        var userHtml = await JS.InvokeAsync<string>("formatWhatsApp", text);
+        _messages.Add(new ChatMessage { Role = "user", HtmlContent = userHtml });
+        
+        _isTyping = true;
+        await ScrollChat();
+
+        // 1. Static Flow evaluation
+        var flowMatch = _config.Flows.FirstOrDefault(f => text.Contains(f.Trigger, StringComparison.OrdinalIgnoreCase));
+        
+        if (flowMatch != null)
+        {
+            _isTyping = false;
+            var replyHtml = await JS.InvokeAsync<string>("formatWhatsApp", flowMatch.Response);
+            _messages.Add(new ChatMessage { Role = "flow-match", Label = flowMatch.Trigger, HtmlContent = replyHtml });
+            await ScrollChat();
+            return;
+        }
+
+        // 2. LLM execution
+        _contextHistory.Add(ConversationMessage.User(text));
+        
+        try
+        {
+            // Omit tools list here for simplicity of UI simulator, or we could inject them if we depend on DI
+            var reply = await _llm.CompleteAsync(_contextHistory);
+            
+            _contextHistory.Add(ConversationMessage.Assistant(reply));
+            
+            // Keep history short
+            if (_contextHistory.Count > 10)
+            {
+                _contextHistory.RemoveRange(0, 2);
+            }
+
+            var agentHtml = await JS.InvokeAsync<string>("formatWhatsApp", reply);
+            _messages.Add(new ChatMessage { Role = "agent", HtmlContent = agentHtml });
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage { Role = "agent", HtmlContent = $"Erro no LLM: {ex.Message}" });
+        }
+        finally
+        {
+            _isTyping = false;
+        }
+        
+        await ScrollChat();
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task ScrollChat()
+    {
+        await Task.Delay(50);
+        await JS.InvokeVoidAsync("scrollToBottom", "test-chat");
+    }
+
+    private class ChatMessage
+    {
+        public string Role { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string HtmlContent { get; set; } = "";
+    }
+}

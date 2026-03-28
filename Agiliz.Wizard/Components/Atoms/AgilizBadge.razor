@@ -1,0 +1,14 @@
+<span class="badge @BadgeClass">
+    @Text
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// groq | claude | flow
+    /// </summary>
+    [Parameter] public string ColorType { get; set; } = "groq";
+
+    private string BadgeClass => $"badge-{ColorType.ToLower()}";
+}

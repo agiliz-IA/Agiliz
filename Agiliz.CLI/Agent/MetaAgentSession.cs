@@ -81,7 +81,7 @@ public sealed class MetaAgentSession
     {
         _history.Add(ConversationMessage.User(userMessage));
 
-        var reply = await _llm.CompleteAsync(_history, ct);
+        var reply = await _llm.CompleteAsync(_history, null, ct);
         _history.Add(ConversationMessage.Assistant(reply));
 
         return reply;

@@ -1,0 +1,76 @@
+@inject NavigationManager NavManager
+
+<aside class="sidebar">
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-text">AGILIZ</div>
+        <div class="sidebar-logo-sub">bot manager</div>
+    </div>
+    
+    <nav class="sidebar-nav">
+        <button class="nav-item @(IsActive("") ? "active" : "")" @onclick='() => NavigateTo("")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+                <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+            </svg>
+            Dashboard
+        </button>
+
+        <button class="nav-item @(IsActive("telemetry") ? "active" : "")" @onclick='() => NavigateTo("telemetry")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 14h12M4 14V8m4 6V4m4 10v-6"></path>
+            </svg>
+            Telemetria
+        </button>
+
+        <button class="nav-item @(IsActive("email") ? "active" : "")" @onclick='() => NavigateTo("email")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 4l6 4 6-4M2 4v8h12V4H2z"></path>
+            </svg>
+            Disparar E-mail
+        </button>
+
+        <button class="nav-item @(IsActive("create") || IsActive("edit") ? "active" : "")" @onclick='() => NavigateTo("create")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="8" cy="8" r="6.5"/><line x1="8" y1="5" x2="8" y2="11"/><line x1="5" y1="8" x2="11" y2="8"/>
+            </svg>
+            Novo Bot
+        </button>
+    </nav>
+
+    <div class="sidebar-footer">
+        v1.0 · Blazor
+    </div>
+</aside>
+
+@implements IDisposable
+
+@code {
+    protected override void OnInitialized()
+    {
+        NavManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        NavManager.LocationChanged -= OnLocationChanged;
+    }
+
+    private bool IsActive(string href)
+    {
+        var path = new Uri(NavManager.Uri).AbsolutePath.Trim('/');
+        if (string.IsNullOrEmpty(href))
+            return string.IsNullOrEmpty(path);
+            
+        return path.StartsWith(href, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void NavigateTo(string href)
+    {
+        NavManager.NavigateTo($"/{href}");
+    }
+}

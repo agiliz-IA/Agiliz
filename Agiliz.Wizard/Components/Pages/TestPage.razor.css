@@ -1,0 +1,127 @@
+.page-header {
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+}
+.page-title {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.page-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.wizard-content {
+  padding: 28px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 800px;
+}
+.chat-grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.chat-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.chat-input-area {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.chat-textarea {
+  flex: 1;
+  resize: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+  height: 48px;
+}
+.chat-textarea:focus { border-color: var(--accent); }
+
+.chat-row { display: flex; flex-direction: column; width: 100%; }
+.user-row { align-items: flex-end; }
+.agent-row { align-items: flex-start; }
+
+.bubble-label {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: 4px;
+  font-family: var(--mono);
+}
+.chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  font-family: var(--sans);
+}
+.chat-bubble.user {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-right-radius: 2px;
+}
+.chat-bubble.agent {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  border-bottom-left-radius: 2px;
+  color: var(--text);
+}
+.chat-bubble.flow-match {
+  background: var(--surface-2);
+  border: 1px dashed var(--teal);
+  border-bottom-left-radius: 2px;
+}
+.flow-badge-inline {
+  font-size: 10px;
+  background: rgba(16,185,129,0.15);
+  color: var(--teal);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-family: var(--mono);
+  margin-bottom: 4px;
+  width: fit-content;
+}
+
+.typing-indicator {
+  display: flex; gap: 4px; padding: 12px 16px;
+  background: var(--surface-2); border-radius: 12px;
+  border-bottom-left-radius: 2px; width: fit-content;
+}
+.typing-dot {
+  width: 6px; height: 6px; background: var(--text-3);
+  border-radius: 50%; animation: typing 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}

@@ -6,7 +6,7 @@ namespace Agiliz.Runtime.Services;
 /// Núcleo de processamento de uma mensagem recebida.
 /// Ordem: flow match → LLM. Sem side effects (não envia nada, só retorna string).
 /// </summary>
-public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger)
+public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools)
 {
     public async Task<string> ProcessAsync(
         TenantEntry tenant,
@@ -31,7 +31,7 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger)
 
         try
         {
-            var reply = await tenant.LlmClient.CompleteAsync(history, ct);
+            var reply = await tenant.LlmClient.CompleteAsync(history, tools.ToList(), ct);
             sessions.AddAssistantReply(userPhone, reply);
             logger.LogInformation("[{Tenant}] LLM respondeu ({Chars} chars)", tenant.Config.TenantId, reply.Length);
             return reply;

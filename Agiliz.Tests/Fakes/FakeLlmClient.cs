@@ -29,7 +29,7 @@ public sealed class FakeLlmClient : ILlmClient
         return this;
     }
 
-    public Task<string> CompleteAsync(IReadOnlyList<ConversationMessage> history, CancellationToken ct = default)
+    public Task<string> CompleteAsync(IReadOnlyList<ConversationMessage> history, IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null, CancellationToken ct = default)
     {
         ReceivedHistories.Add(history);
 

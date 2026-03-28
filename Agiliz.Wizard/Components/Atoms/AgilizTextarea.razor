@@ -1,0 +1,40 @@
+<div class="form-group">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="form-label">@Label</label>
+    }
+    
+    <textarea class="form-input" 
+              rows="@Rows"
+              placeholder="@Placeholder"
+              @bind="Value" 
+              @bind:event="oninput"></textarea>
+
+    @if (!string.IsNullOrEmpty(Hint))
+    {
+        <div class="form-hint">@Hint</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Hint { get; set; } = "";
+    [Parameter] public string Placeholder { get; set; } = "";
+    [Parameter] public int Rows { get; set; } = 5;
+    
+    private string _value = "";
+    [Parameter] 
+    public string Value 
+    { 
+        get => _value; 
+        set 
+        { 
+            if (_value != value) 
+            { 
+                _value = value; 
+                ValueChanged.InvokeAsync(value); 
+            } 
+        } 
+    }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+}
