@@ -29,7 +29,7 @@ public sealed class FakeLlmClient : ILlmClient
         return this;
     }
 
-    public Task<string> CompleteAsync(IReadOnlyList<ConversationMessage> history, IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null, CancellationToken ct = default)
+    public Task<LlmResponse> CompleteAsync(IReadOnlyList<ConversationMessage> history, IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null, CancellationToken ct = default)
     {
         ReceivedHistories.Add(history);
 
@@ -41,8 +41,8 @@ public sealed class FakeLlmClient : ILlmClient
         }
 
         if (_replies.TryDequeue(out var reply))
-            return Task.FromResult(reply);
+            return Task.FromResult(new LlmResponse(reply, new TokenUsage(10, 20), new List<ToolExecutionCost>()));
 
-        return Task.FromResult("Resposta padrão do fake LLM.");
+        return Task.FromResult(new LlmResponse("Resposta padrão do fake LLM.", new TokenUsage(10, 20), new List<ToolExecutionCost>()));
     }
 }

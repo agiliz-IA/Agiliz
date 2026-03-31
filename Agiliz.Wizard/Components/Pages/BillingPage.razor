@@ -1,0 +1,102 @@
+@page "/billing"
+@using Agiliz.Core.Billing
+@using Agiliz.Core.Models
+@using Agiliz.Wizard.Components.Atoms
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Financeiro & Faturamento</div>
+        <div class="page-sub">Controle o Total Cost of Ownership (TCO) dos tenantes e APIs</div>
+    </div>
+</div>
+
+<div class="wizard-content">
+    
+    <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+        <div class="form-card" style="flex: 1; text-align: center;">
+            <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO TOTAL (TCO)</div>
+            <div style="font-size: 32px; font-weight: 700; color: var(--accent); margin-top: 8px;">
+                $ @TotalUsd.ToString("0.000")
+            </div>
+        </div>
+        <div class="form-card" style="flex: 1; text-align: center;">
+            <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO LLM (TOKENS)</div>
+            <div style="font-size: 32px; font-weight: 700; color: var(--teal); margin-top: 8px;">
+                $ @LlmUsd.ToString("0.000")
+            </div>
+        </div>
+        <div class="form-card" style="flex: 1; text-align: center;">
+            <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO FERRAMENTAS</div>
+            <div style="font-size: 32px; font-weight: 700; color: var(--yellow); margin-top: 8px;">
+                $ @ToolsUsd.ToString("0.000")
+            </div>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <h4 style="margin-bottom: 20px; font-family: var(--mono); color: var(--text-2);">Extrato de Lançamentos</h4>
+
+        @if (Entries.Count == 0)
+        {
+            <div style="text-align: center; color: var(--text-3); padding: 40px 0;">
+                Nenhum custo registrado no momento. Comece a conversar com os bots!
+            </div>
+        }
+        else
+        {
+            <table class="billing-table">
+                <thead>
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Tenant</th>
+                        <th>Tipo</th>
+                        <th>Descrição</th>
+                        <th style="text-align: right;">Custo (USD)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in Entries.OrderByDescending(e => e.Timestamp))
+                    {
+                        <tr>
+                            <td>@entry.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            <td><AgilizBadge Variant="primary">@entry.TenantId</AgilizBadge></td>
+                            <td>
+                                @if (entry.Type == CostType.TokensLLM)
+                                {
+                                    <AgilizBadge Variant="success">LLM</AgilizBadge>
+                                }
+                                else if (entry.Type == CostType.ToolExecution)
+                                {
+                                    <AgilizBadge Variant="warning">Tool</AgilizBadge>
+                                }
+                                else
+                                {
+                                    <AgilizBadge Variant="neutral">@entry.Type.ToString()</AgilizBadge>
+                                }
+                            </td>
+                            <td class="desc-cell">@entry.Description</td>
+                            <td style="text-align: right; font-family: var(--mono); color: var(--text);">
+                                $@entry.AmountUsd.ToString("0.00000")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<CostEntry> Entries = new();
+
+    private decimal TotalUsd => Entries.Sum(e => e.AmountUsd);
+    private decimal LlmUsd => Entries.Where(e => e.Type == CostType.TokensLLM).Sum(e => e.AmountUsd);
+    private decimal ToolsUsd => Entries.Where(e => e.Type == CostType.ToolExecution).Sum(e => e.AmountUsd);
+
+    protected override void OnInitialized()
+    {
+        var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        Entries = BillingStore.GetEntries(dir);
+    }
+}

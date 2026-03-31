@@ -17,5 +17,5 @@ public interface ITool
     JsonObject ParametersSchema { get; }
 
     /// <summary>Executa a ferramenta com a string JSON gerada pelo LLM e retorna o resultado.</summary>
-    Task<string> ExecuteAsync(string arguments, CancellationToken ct = default);
+    Task<Agiliz.Core.Models.ToolResult> ExecuteAsync(string arguments, CancellationToken ct = default);
 }

@@ -14,6 +14,13 @@ public sealed class WizardSession
 
 public sealed class WizardSessionStore
 {
+    private readonly string _configsDir;
+
+    public WizardSessionStore(Microsoft.Extensions.Configuration.IConfiguration config)
+    {
+        _configsDir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+    }
+
     private const string MetaSystemPrompt = """
         Você é o Agiliz, um assistente especialista em criação de bots de WhatsApp.
         Sua tarefa é entrevistar o usuário para coletar informações sobre o negócio
@@ -89,8 +96,12 @@ public sealed class WizardSessionStore
         session.History.Add(ConversationMessage.User(message));
         session.LastActivity = DateTimeOffset.UtcNow;
 
-        var reply = await session.LlmClient.CompleteAsync(session.History, null, ct);
+        var response = await session.LlmClient.CompleteAsync(session.History, null, ct);
+        var reply = response.Text;
         session.History.Add(ConversationMessage.Assistant(reply));
+
+        var tokenCostUsd = (response.Usage.Prompt * 0.000003m) + (response.Usage.Completion * 0.000015m);
+        Agiliz.Core.Billing.BillingStore.Record(_configsDir, new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });
 
         var configReady = reply.Contains("===JSON_START===") && reply.Contains("===JSON_END===");
         string? jsonConfig = null;

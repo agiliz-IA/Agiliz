@@ -27,12 +27,16 @@ public sealed class GroqClient : ILlmClient
         _endpoint = $"{(baseUrl ?? "https://api.groq.com").TrimEnd('/')}/openai/v1/chat/completions";
     }
 
-    public async Task<string> CompleteAsync(
+    public async Task<LlmResponse> CompleteAsync(
         IReadOnlyList<ConversationMessage> history,
         IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null,
         CancellationToken ct = default)
     {
         var currentHistory = history.ToList(); // Cópia mutável para o loop
+        
+        var totalPromptTokens = 0;
+        var totalCompletionTokens = 0;
+        var toolCosts = new List<ToolExecutionCost>();
         
         while (true)
         {
@@ -65,10 +69,19 @@ public sealed class GroqClient : ILlmClient
 
             var message = result.Choices[0].Message;
 
+            if (result.Usage is not null)
+            {
+                totalPromptTokens += result.Usage.PromptTokens;
+                totalCompletionTokens += result.Usage.CompletionTokens;
+            }
+
             // Se for uma resposta normal de texto
             if (message.ToolCalls is null || message.ToolCalls.Count == 0)
             {
-                return message.Content ?? "";
+                return new LlmResponse(
+                    message.Content ?? "", 
+                    new TokenUsage(totalPromptTokens, totalCompletionTokens), 
+                    toolCosts);
             }
 
             // Precisamos executar as tools!
@@ -84,7 +97,12 @@ public sealed class GroqClient : ILlmClient
                 {
                     try
                     {
-                        toolResultStr = await tool.ExecuteAsync(tc.Function.Arguments, ct);
+                        var res = await tool.ExecuteAsync(tc.Function.Arguments, ct);
+                        toolResultStr = res.Output;
+                        if (res.Cost.HasValue && res.Cost.Value > 0)
+                        {
+                            toolCosts.Add(new ToolExecutionCost(tool.Name, res.Cost.Value));
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -151,9 +169,10 @@ public sealed class GroqClient : ILlmClient
     }
 
     // Response DTOs
-    private sealed record GroqResponse(List<GroqChoice> Choices);
+    private sealed record GroqResponse(List<GroqChoice> Choices, GroqUsage? Usage);
     private sealed record GroqChoice(GroqMessage Message);
     private sealed record GroqMessage(string? Content, List<GroqToolCall>? ToolCalls);
     private sealed record GroqToolCall(string Id, string Type, GroqFunction Function);
     private sealed record GroqFunction(string Name, string Arguments);
+    private sealed record GroqUsage(int PromptTokens, int CompletionTokens);
 }

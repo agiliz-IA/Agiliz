@@ -6,7 +6,7 @@ namespace Agiliz.Runtime.Services;
 /// Núcleo de processamento de uma mensagem recebida.
 /// Ordem: flow match → LLM. Sem side effects (não envia nada, só retorna string).
 /// </summary>
-public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools)
+public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools, Microsoft.Extensions.Configuration.IConfiguration config)
 {
     public async Task<string> ProcessAsync(
         TenantEntry tenant,
@@ -31,9 +31,22 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
 
         try
         {
-            var reply = await tenant.LlmClient.CompleteAsync(history, tools.ToList(), ct);
+            var response = await tenant.LlmClient.CompleteAsync(history, tools.ToList(), ct);
+            var reply = response.Text;
             sessions.AddAssistantReply(userPhone, reply);
             logger.LogInformation("[{Tenant}] LLM respondeu ({Chars} chars)", tenant.Config.TenantId, reply.Length);
+            
+            // Faturamento
+            var tokenCostUsd = (response.Usage.Prompt * 0.000003m) + (response.Usage.Completion * 0.000015m);
+            var dir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            
+            Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenant.Config.TenantId, Type = CostType.TokensLLM, Description = $"Inference ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });
+            
+            foreach(var tc in response.ToolCosts)
+            {
+                Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenant.Config.TenantId, Type = CostType.ToolExecution, Description = $"Tool: {tc.ToolName}", AmountUsd = tc.Cost });
+            }
+
             return reply;
         }
         catch (Exception ex)

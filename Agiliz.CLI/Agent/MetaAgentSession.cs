@@ -77,12 +77,12 @@ public sealed class MetaAgentSession
     /// Envia a mensagem do usuário e retorna a resposta do agente.
     /// Retorna null quando o JSON de config já foi emitido e a sessão está encerrada.
     /// </summary>
-    public async Task<string> SendAsync(string userMessage, CancellationToken ct = default)
+    public async Task<LlmResponse> SendAsync(string userMessage, CancellationToken ct = default)
     {
         _history.Add(ConversationMessage.User(userMessage));
 
         var reply = await _llm.CompleteAsync(_history, null, ct);
-        _history.Add(ConversationMessage.Assistant(reply));
+        _history.Add(ConversationMessage.Assistant(reply.Text));
 
         return reply;
     }

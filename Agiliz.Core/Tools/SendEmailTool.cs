@@ -43,7 +43,7 @@ public sealed class SendEmailTool : ITool
         ["required"] = new JsonArray { "to", "subject", "body" }
     };
 
-    public async Task<string> ExecuteAsync(string arguments, CancellationToken ct = default)
+    public async Task<Agiliz.Core.Models.ToolResult> ExecuteAsync(string arguments, CancellationToken ct = default)
     {
         _logger.LogInformation("LLM chamou SendEmailTool com argumentos: {Args}", arguments);
 
@@ -56,12 +56,12 @@ public sealed class SendEmailTool : ITool
 
             await _emailSender.SendEmailAsync(to, subject, body, ct);
 
-            return "E-mail enviado com sucesso para " + to;
+            return new Agiliz.Core.Models.ToolResult("E-mail enviado com sucesso para " + to, Cost: 0.02m);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao analisar argumentos ou enviar e-mail.");
-            return "Falha ao enviar e-mail: " + ex.Message;
+            return new Agiliz.Core.Models.ToolResult("Falha ao enviar e-mail: " + ex.Message);
         }
     }
 }

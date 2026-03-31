@@ -30,7 +30,8 @@ public sealed class SendEmailToolTests
         var result = await _tool.ExecuteAsync(json);
 
         _emailSenderMock.Verify(x => x.SendEmailAsync("teste@exemplo.com", "Olá Mundo", "Corpo da mensagem", It.IsAny<CancellationToken>()), Times.Once);
-        result.Should().Be("E-mail enviado com sucesso para teste@exemplo.com");
+        result.Output.Should().Be("E-mail enviado com sucesso para teste@exemplo.com");
+        result.Cost.Should().Be(0.02m);
     }
 
     [Fact]
@@ -41,6 +42,6 @@ public sealed class SendEmailToolTests
         var result = await _tool.ExecuteAsync(json);
 
         _emailSenderMock.Verify(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        result.Should().StartWith("Falha ao enviar e-mail");
+        result.Output.Should().StartWith("Falha ao enviar e-mail");
     }
 }

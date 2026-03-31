@@ -115,7 +115,7 @@
             // Omit tools list here for simplicity of UI simulator, or we could inject them if we depend on DI
             var reply = await _llm.CompleteAsync(_contextHistory);
             
-            _contextHistory.Add(ConversationMessage.Assistant(reply));
+            _contextHistory.Add(ConversationMessage.Assistant(reply.Text));
             
             // Keep history short
             if (_contextHistory.Count > 10)

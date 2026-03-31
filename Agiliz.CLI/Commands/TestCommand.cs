@@ -65,8 +65,8 @@ public static class TestCommand
             {
                 var response = await llm.CompleteAsync(history);
                 ConsoleRenderer.ClearLastLine();
-                history.Add(ConversationMessage.Assistant(response));
-                ConsoleRenderer.AgentSay(response);
+                history.Add(ConversationMessage.Assistant(response.Text));
+                ConsoleRenderer.AgentSay(response.Text);
             }
             catch (Exception ex)
             {

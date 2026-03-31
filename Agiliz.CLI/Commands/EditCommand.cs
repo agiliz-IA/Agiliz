@@ -53,16 +53,16 @@ public static class EditCommand
             var reply = await session.SendAsync(userInput);
             ConsoleRenderer.ClearLastLine();
 
-            if (MetaAgentSession.HasConfigBlock(reply))
+            if (MetaAgentSession.HasConfigBlock(reply.Text))
             {
-                generatedReply = reply;
-                var textPart = reply[..reply.IndexOf("===JSON_START===", StringComparison.Ordinal)].Trim();
+                generatedReply = reply.Text;
+                var textPart = reply.Text[..reply.Text.IndexOf("===JSON_START===", StringComparison.Ordinal)].Trim();
                 if (!string.IsNullOrEmpty(textPart))
                     ConsoleRenderer.AgentSay(textPart);
                 break;
             }
 
-            ConsoleRenderer.AgentSay(reply);
+            ConsoleRenderer.AgentSay(reply.Text);
         }
 
         var (systemPrompt, flows) = MetaAgentSession.ExtractConfig(generatedReply!);

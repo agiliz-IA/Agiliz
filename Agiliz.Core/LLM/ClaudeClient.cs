@@ -27,7 +27,7 @@ public sealed class ClaudeClient : ILlmClient
         _endpoint = $"{(baseUrl ?? "https://api.anthropic.com").TrimEnd('/')}/v1/messages";
     }
 
-    public async Task<string> CompleteAsync(
+    public async Task<LlmResponse> CompleteAsync(
         IReadOnlyList<ConversationMessage> history,
         IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null,
         CancellationToken ct = default)
@@ -53,10 +53,14 @@ public sealed class ClaudeClient : ILlmClient
         var result = await response.Content.ReadFromJsonAsync<ClaudeResponse>(JsonOpts, ct)
                      ?? throw new InvalidOperationException("Resposta vazia do Claude.");
 
-        return result.Content[0].Text;
+        var text = result.Content[0].Text;
+        var tokenUsage = new TokenUsage(result.Usage?.InputTokens ?? 0, result.Usage?.OutputTokens ?? 0);
+        
+        return new LlmResponse(text, tokenUsage, new List<ToolExecutionCost>());
     }
 
     // Response DTOs
-    private sealed record ClaudeResponse(List<ClaudeBlock> Content);
+    private sealed record ClaudeResponse(List<ClaudeBlock> Content, ClaudeUsage? Usage);
     private sealed record ClaudeBlock(string Type, string Text);
+    private sealed record ClaudeUsage(int InputTokens, int OutputTokens);
 }

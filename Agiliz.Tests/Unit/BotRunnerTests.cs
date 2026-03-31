@@ -16,7 +16,9 @@ public sealed class BotRunnerTests
 
     public BotRunnerTests()
     {
-        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance, Array.Empty<Agiliz.Core.Tools.ITool>());
+        var mockConfig = new Moq.Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+        mockConfig.Setup(c => c["ConfigsDir"]).Returns((string?)null);
+        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance, Array.Empty<Agiliz.Core.Tools.ITool>(), mockConfig.Object);
     }
 
     private TenantEntry Tenant(BotConfig config) => new(config, _llm);
