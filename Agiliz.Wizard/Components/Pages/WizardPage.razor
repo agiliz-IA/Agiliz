@@ -163,6 +163,10 @@
             return;
         }
 
+        _tenantId = _tenantId.Trim().ToLower().Replace(" ", "-");
+        // Remove any non-digits from WhatsApp number as well, to be safe
+        _whatsAppNumber = System.Text.RegularExpressions.Regex.Replace(_whatsAppNumber, @"\D", "");
+
         _isLoading = true;
         
         // Mocking the behavior of POST /api/sessions

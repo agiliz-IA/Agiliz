@@ -12,6 +12,9 @@ var configsDir = builder.Configuration["ConfigsDir"]
 builder.Services.AddSingleton<WizardSessionStore>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
+builder.Services.AddServerSideBlazor()
+    .AddCircuitOptions(options => { options.DetailedErrors = true; });
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddAntiforgery();
