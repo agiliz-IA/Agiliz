@@ -9,6 +9,8 @@ namespace Agiliz.Runtime.Services;
 /// </summary>
 public sealed class SessionStore
 {
+    public record SessionInfo(IReadOnlyList<ConversationMessage> History, int TurnCount, decimal AccumulatedCostUsd);
+
     private const int MaxMessagesPerSession = 10; // 5 trocas (user + assistant)
     private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(30);
 
@@ -18,14 +20,17 @@ public sealed class SessionStore
     /// Retorna o histórico atual do usuário e adiciona a nova mensagem.
     /// Descarta as mais antigas se ultrapassar o limite.
     /// </summary>
-    public IReadOnlyList<ConversationMessage> AddAndGet(string userPhone, ConversationMessage message)
+    public SessionInfo AddAndGet(string userPhone, ConversationMessage message)
     {
         var session = _sessions.AddOrUpdate(
             userPhone,
-            _ => new Session([message]),
+            _ => new Session([message]) { TurnCount = 1 },
             (_, existing) =>
             {
                 existing.Messages.Add(message);
+                
+                if (message.Role == MessageRole.User)
+                    existing.TurnCount++;
 
                 // Janela deslizante: remove o par mais antigo se exceder o limite
                 while (existing.Messages.Count > MaxMessagesPerSession)
@@ -35,7 +40,7 @@ public sealed class SessionStore
                 return existing;
             });
 
-        return session.Messages.AsReadOnly();
+        return new SessionInfo(session.Messages.AsReadOnly(), session.TurnCount, session.AccumulatedCostUsd);
     }
 
     /// <summary>
@@ -47,6 +52,14 @@ public sealed class SessionStore
         {
             session.Messages.Add(ConversationMessage.Assistant(reply));
             session.LastActivity = DateTimeOffset.UtcNow;
+        }
+    }
+
+    public void AddCost(string userPhone, decimal costUsd)
+    {
+        if (_sessions.TryGetValue(userPhone, out var session))
+        {
+            session.AccumulatedCostUsd += costUsd;
         }
     }
 
@@ -66,6 +79,8 @@ public sealed class SessionStore
     private sealed class Session(List<ConversationMessage> messages)
     {
         public List<ConversationMessage> Messages { get; } = messages;
+        public int TurnCount { get; set; }
+        public decimal AccumulatedCostUsd { get; set; }
         public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
     }
 }

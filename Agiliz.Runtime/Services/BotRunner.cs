@@ -26,18 +26,32 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
             return flow.Response;
         }
 
-        // ─── 2. LLM com histórico da sessão ──────────────────────────────────
-        var history = sessions.AddAndGet(userPhone, ConversationMessage.User(body));
+        // ─── 2. Guard Rails & LLM ──────────────────────────────────
+        var sessionState = sessions.AddAndGet(userPhone, ConversationMessage.User(body));
+
+        if (sessionState.TurnCount > tenant.Config.GuardRails.MaxSessionTurns || 
+            sessionState.AccumulatedCostUsd > tenant.Config.GuardRails.MaxSessionSpendUsd)
+        {
+            logger.LogWarning("[{Tenant}] Guard Rail ativado ({Phone}). Turns: {Turns}/{MaxT}, Cost: {Cost}/{MaxC}", 
+                tenant.Config.TenantId, userPhone, sessionState.TurnCount, tenant.Config.GuardRails.MaxSessionTurns, 
+                sessionState.AccumulatedCostUsd, tenant.Config.GuardRails.MaxSessionSpendUsd);
+            
+            return tenant.Config.GuardRails.FallbackMessage;
+        }
 
         try
         {
-            var response = await tenant.LlmClient.CompleteAsync(history, tools.ToList(), ct);
+            var response = await tenant.LlmClient.CompleteAsync(sessionState.History, tools.ToList(), ct);
             var reply = response.Text;
             sessions.AddAssistantReply(userPhone, reply);
             logger.LogInformation("[{Tenant}] LLM respondeu ({Chars} chars)", tenant.Config.TenantId, reply.Length);
             
             // Faturamento
             var tokenCostUsd = (response.Usage.Prompt * 0.000003m) + (response.Usage.Completion * 0.000015m);
+            var totalOpCost = tokenCostUsd + response.ToolCosts.Sum(t => t.Cost);
+            
+            sessions.AddCost(userPhone, totalOpCost);
+            
             var dir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
             
             Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenant.Config.TenantId, Type = CostType.TokensLLM, Description = $"Inference ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });

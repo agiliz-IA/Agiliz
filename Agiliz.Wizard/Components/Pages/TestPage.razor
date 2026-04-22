@@ -123,7 +123,7 @@
                 _contextHistory.RemoveRange(0, 2);
             }
 
-            var agentHtml = await JS.InvokeAsync<string>("formatWhatsApp", reply);
+            var agentHtml = await JS.InvokeAsync<string>("formatWhatsApp", reply.Text);
             _messages.Add(new ChatMessage { Role = "agent", HtmlContent = agentHtml });
         }
         catch (Exception ex)

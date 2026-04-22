@@ -15,7 +15,7 @@ public sealed class SessionStoreTests
     [Fact]
     public void AddAndGet_FirstMessage_ReturnsSingleEntryHistory()
     {
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("oi"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("oi")).History;
 
         history.Should().ContainSingle(m => m.Role == MessageRole.User && m.Content == "oi");
     }
@@ -25,7 +25,7 @@ public sealed class SessionStoreTests
     {
         _store.AddAndGet(Phone, ConversationMessage.User("msg1"));
         _store.AddAssistantReply(Phone, "resposta1");
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("msg2"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("msg2")).History;
 
         history.Should().HaveCount(3);
         history[0].Content.Should().Be("msg1");
@@ -37,7 +37,7 @@ public sealed class SessionStoreTests
     public void AddAndGet_DifferentPhones_AreIsolated()
     {
         _store.AddAndGet("+5521111", ConversationMessage.User("alice"));
-        var bobHistory = _store.AddAndGet("+5522222", ConversationMessage.User("bob"));
+        var bobHistory = _store.AddAndGet("+5522222", ConversationMessage.User("bob")).History;
 
         bobHistory.Should().ContainSingle(m => m.Content == "bob");
     }
@@ -55,7 +55,7 @@ public sealed class SessionStoreTests
         }
 
         // A 11ª mensagem deve acionar o descarte do par mais antigo
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("user6"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("user6")).History;
 
         history.Should().HaveCount(9); // ainda 10 (removeu 1 par, adicionou 1)
         history[0].Content.Should().Be("user2"); // user1/bot1 foram descartados
@@ -70,7 +70,7 @@ public sealed class SessionStoreTests
             _store.AddAssistantReply(Phone, $"bot{i}");
         }
 
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("user7"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("user7")).History;
 
         // As mensagens mais recentes devem estar presentes
         history.Select(m => m.Content).Should().Contain("user6", "bot6", "user7");
@@ -85,7 +85,7 @@ public sealed class SessionStoreTests
         _store.AddAndGet(Phone, ConversationMessage.User("pergunta"));
         _store.AddAssistantReply(Phone, "resposta");
 
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("outra"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("outra")).History;
         history.Should().HaveCount(3);
         history[1].Role.Should().Be(MessageRole.Assistant);
         history[1].Content.Should().Be("resposta");
@@ -107,7 +107,7 @@ public sealed class SessionStoreTests
         _store.PurgeExpired();
 
         // Deve continuar existindo
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("ping"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("ping")).History;
         history.Should().HaveCount(2); // recente + ping
     }
 
@@ -119,7 +119,7 @@ public sealed class SessionStoreTests
         // Chamar PurgeExpired imediatamente não deve remover sessão recente
         _store.PurgeExpired();
 
-        var history = _store.AddAndGet(Phone, ConversationMessage.User("ping"));
+        var history = _store.AddAndGet(Phone, ConversationMessage.User("ping")).History;
         history.Should().HaveCount(2);
     }
 }

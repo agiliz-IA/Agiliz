@@ -14,6 +14,15 @@ public sealed record BotConfig
     public List<FlowEntry> Flows { get; init; } = [];
 
     public LlmSettings Llm { get; init; } = new();
+    
+    public GuardRailSettings GuardRails { get; init; } = new();
+}
+
+public sealed class GuardRailSettings
+{
+    public int MaxSessionTurns { get; init; } = 25;
+    public decimal MaxSessionSpendUsd { get; init; } = 0.50m;
+    public string FallbackMessage { get; init; } = "Agradecemos muito pelo seu contato! Para garantir o melhor atendimento e organizar nossas demandas, precisamos pausar nossa conversa por agora. Se precisar de mais alguma coisa, por favor, retorne o contato mais tarde ou aguarde que um de nossos humanos falará com você! Um abraço!";
 }
 
 public sealed class FlowEntry
