@@ -14,6 +14,8 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
         string messageBody,
         CancellationToken ct = default)
     {
+        RuntimeContext.Current.Value = new RuntimeContextData(tenant.Config.TenantId, userPhone);
+
         var body = messageBody.Trim();
 
         // ─── 1. Flow match (sem chamar o LLM) ────────────────────────────────
@@ -41,7 +43,12 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
 
         try
         {
-            var response = await tenant.LlmClient.CompleteAsync(sessionState.History, tools.ToList(), ct);
+            var activeTools = tools.Where(t => 
+                (tenant.Config.Type == BotType.Scheduling) || 
+                (tenant.Config.Type != BotType.Scheduling && t.Name != "verificar_agenda" && t.Name != "marcar_agenda")
+            ).ToList();
+
+            var response = await tenant.LlmClient.CompleteAsync(sessionState.History, activeTools, ct);
             var reply = response.Text;
             sessions.AddAssistantReply(userPhone, reply);
             logger.LogInformation("[{Tenant}] LLM respondeu ({Chars} chars)", tenant.Config.TenantId, reply.Length);

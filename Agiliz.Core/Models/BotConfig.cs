@@ -4,6 +4,8 @@ public sealed record BotConfig
 {
     public string TenantId { get; init; } = string.Empty;
 
+    public BotType Type { get; init; } = BotType.Generic;
+
     /// <summary>Número WhatsApp no formato "+5511999999999" (apenas dígitos com país)</summary>
     public string WhatsAppNumber { get; init; } = string.Empty;
 
@@ -16,7 +18,12 @@ public sealed record BotConfig
     public LlmSettings Llm { get; init; } = new();
     
     public GuardRailSettings GuardRails { get; init; } = new();
+
+    public List<string> PaymentMethods { get; init; } = [];
+    public bool LgpdConsentRequired { get; init; } = false;
 }
+
+public enum BotType { Generic, Scheduling }
 
 public sealed class GuardRailSettings
 {

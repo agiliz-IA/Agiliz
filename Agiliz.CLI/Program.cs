@@ -17,6 +17,7 @@ await (command switch
     "edit"   => EditCommand.RunAsync(configsDir, tenantArg),
     "list"   => ListCommand.RunAsync(configsDir),
     "test"   => TestCommand.RunAsync(configsDir, tenantArg),
+    "db"     => tenantArg == "migrate" ? DbMigrateCommand.RunAsync() : ShowHelp(),
     _        => ShowHelp()
 });
 
@@ -28,6 +29,7 @@ static Task ShowHelp()
           agiliz [green]edit[/]   [grey]<tenant-id>[/]   Edita um bot existente
           agiliz [green]list[/]              Lista todos os bots
           agiliz [green]test[/]   [grey]<tenant-id>[/]   Testa um bot no terminal
+          agiliz [green]db migrate[/]        Aplica migrações pendentes no BD
         """);
     return Task.CompletedTask;
 }

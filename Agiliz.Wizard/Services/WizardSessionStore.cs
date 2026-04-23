@@ -8,6 +8,7 @@ public sealed class WizardSession
 {
     public Guid Id { get; } = Guid.NewGuid();
     public required ILlmClient LlmClient { get; init; }
+    public BotType Type { get; init; } = BotType.Generic;
     public List<ConversationMessage> History { get; } = [];
     public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -62,13 +63,51 @@ public sealed class WizardSessionStore
         - Respostas diretas e completas (serão enviadas sem passar pelo LLM).
         """;
 
+    private const string SchedulingMetaSystemPrompt = """
+        Você é o Agiliz, um assistente especialista em criação de bots de WhatsApp de Agendamento.
+        Sua tarefa é entrevistar o profissional para configurar um bot de marcação de horários.
+
+        FASE DE ENTREVISTA
+        Faça perguntas objetivas e uma por vez. Colete:
+        1. Nome do profissional ou negócio.
+        2. Tom do atendimento (formal, simpático...).
+        3. Quais são os horários e dias de funcionamento.
+        4. O bot precisa pedir consentimento para salvar dados (LGPD)?
+        5. Quais as formas de pagamento aceitas (Dinheiro, Cartão, Plano de Saúde, etc)?
+        6. Qual o tempo médio de cada agendamento?
+
+        Quando tiver essas informações, diga: "Tenho tudo que preciso. Gerando configuração..."
+
+        FASE DE GERAÇÃO
+        Emita EXATAMENTE este bloco (e nada mais após ele):
+
+        ===JSON_START===
+        {
+          "type": 1,
+          "systemPrompt": "<prompt completo do bot em português, com restrições severas para focar apenas em agendamento, instrução para chamar a tool verificar_agenda e marcar_agenda, e fluxo de coleta de nome/contato/forma_de_pagamento/consentimento_lgpd>",
+          "lgpdConsentRequired": <true/false>,
+          "paymentMethods": ["Dinheiro", "Cartão"],
+          "flows": [
+            { "trigger": "CONFIRMAR_AGENDAMENTO", "response": "Seu agendamento foi confirmado com sucesso!" },
+            { "trigger": "DESMARCAR_AGENDAMENTO", "response": "Agendamento cancelado. Até a próxima." },
+            { "trigger": "REAGENDAR", "response": "Vamos escolher um novo horário." }
+          ]
+        }
+        ===JSON_END===
+
+        REGRAS para o systemPrompt do bot final:
+        - Instrua o bot a NUNCA fugir do escopo de agendamento (guardrail).
+        - Se o usuário tentar puxar outro assunto, o bot deve perguntar educadamente se pode ajudar com algo simples de agendamento.
+        - O bot deve coletar os dados na ordem, sempre perguntando um de cada vez.
+        """;
+
     private readonly ConcurrentDictionary<Guid, WizardSession> _sessions = new();
 
-    public WizardSession Create(string? editContext = null)
+    public WizardSession Create(BotType botType = BotType.Generic, string? editContext = null)
     {
         var metaConfig = new BotConfig
         {
-            SystemPrompt = MetaSystemPrompt,
+            SystemPrompt = botType == BotType.Scheduling ? SchedulingMetaSystemPrompt : MetaSystemPrompt,
             Llm = new LlmSettings
             {
                 Provider = LlmProvider.Groq,
@@ -77,7 +116,7 @@ public sealed class WizardSessionStore
             }
         };
 
-        var session = new WizardSession { LlmClient = LlmClientFactory.Create(metaConfig, new HttpClient()) };
+        var session = new WizardSession { LlmClient = LlmClientFactory.Create(metaConfig, new HttpClient()), Type = botType };
 
         if (editContext is not null)
             session.History.Add(ConversationMessage.User(editContext));

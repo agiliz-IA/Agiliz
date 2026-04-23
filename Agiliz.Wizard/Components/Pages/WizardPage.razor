@@ -34,6 +34,13 @@
             <div class="step-body form-card">
                 <AgilizInput Label="Tenant ID" Placeholder="exemplo_vendas" @bind-Value="_tenantId" />
                 <AgilizInput Label="Número WhatsApp" Placeholder="5511999999999" @bind-Value="_whatsAppNumber" />
+                <div style="margin-top: 16px;">
+                    <label class="form-label toggle-label">Tipo de Bot</label>
+                    <AgilizToggle TValue="BotType" 
+                                  Option1Label="Atendimento Genérico" Option1Value="BotType.Generic"
+                                  Option2Label="Agendamento" Option2Value="BotType.Scheduling"
+                                  @bind-Value="_botType" />
+                </div>
                 <div class="step-actions">
                     <AgilizButton Variant="primary" OnClick="StartInterview" Disabled="_isLoading">Próximo passo</AgilizButton>
                 </div>
@@ -129,6 +136,7 @@
     private int _step = 1;
     private string _tenantId = "";
     private string _whatsAppNumber = "";
+    private BotType _botType = BotType.Scheduling;
     private bool _isLoading;
 
     private string _sessionId = "";
@@ -170,10 +178,14 @@
         _isLoading = true;
         
         // Mocking the behavior of POST /api/sessions
-        var session = SessionStore.Create(IsEdit ? "edit" : "create");
+        var session = SessionStore.Create(_botType, IsEdit ? "edit" : null);
         _sessionId = session.Id.ToString();
         
-        var greetingHtml = await JS.InvokeAsync<string>("formatWhatsApp", "Olá! Sou o assistente de configuração Agiliz. Me fale um pouco sobre o negócio (nome e ramo) para começarmos.");
+        var greetingText = _botType == BotType.Scheduling
+            ? "Olá! Sou o assistente de configuração Agiliz. Me fale o nome do profissional ou negócio, e quais são os horários de funcionamento para começarmos a configurar seu bot de agendamento."
+            : "Olá! Sou o assistente de configuração Agiliz. Me fale um pouco sobre o negócio (nome e ramo) para começarmos.";
+
+        var greetingHtml = await JS.InvokeAsync<string>("formatWhatsApp", greetingText);
 
         _messages.Add(new ChatMessage { Role = "agent", HtmlContent = greetingHtml });
         
@@ -232,7 +244,10 @@
             var preview = new {
                 tenantId = _tenantId,
                 whatsappNumber = _whatsAppNumber,
+                type = _extractedConfig.Type.ToString(),
                 provider = _provider,
+                lgpdConsentRequired = _extractedConfig.LgpdConsentRequired,
+                paymentMethods = _extractedConfig.PaymentMethods,
                 systemPrompt = _extractedConfig.SystemPrompt,
                 flows = _extractedConfig.Flows,
                 llm = new { model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-sonnet-4", maxTokens = 300 }
@@ -253,9 +268,12 @@
         var finalConfig = new BotConfig
         {
             TenantId = _tenantId,
+            Type = _extractedConfig.Type,
             WhatsAppNumber = _whatsAppNumber,
             SystemPrompt = _extractedConfig.SystemPrompt,
             Flows = _extractedConfig.Flows,
+            PaymentMethods = _extractedConfig.PaymentMethods,
+            LgpdConsentRequired = _extractedConfig.LgpdConsentRequired,
             Llm = new LlmSettings { 
                 Provider = Enum.Parse<LlmProvider>(_provider, true), 
                 Model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-3-5-sonnet-20241022",

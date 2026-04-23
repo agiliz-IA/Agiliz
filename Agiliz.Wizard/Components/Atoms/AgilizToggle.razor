@@ -1,0 +1,30 @@
+@typeparam TValue
+
+<div class="toggle-container">
+    <button type="button" class="toggle-btn @(EqualityComparer<TValue>.Default.Equals(Value, Option1Value) ? "active" : "")" @onclick="() => SelectOption(Option1Value)">
+        @Option1Label
+    </button>
+    <button type="button" class="toggle-btn @(EqualityComparer<TValue>.Default.Equals(Value, Option2Value) ? "active" : "")" @onclick="() => SelectOption(Option2Value)">
+        @Option2Label
+    </button>
+</div>
+
+@code {
+    [Parameter] public string Option1Label { get; set; } = "Option 1";
+    [Parameter] public TValue Option1Value { get; set; } = default!;
+    
+    [Parameter] public string Option2Label { get; set; } = "Option 2";
+    [Parameter] public TValue Option2Value { get; set; } = default!;
+
+    [Parameter] public TValue Value { get; set; } = default!;
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+
+    private async Task SelectOption(TValue option)
+    {
+        if (!EqualityComparer<TValue>.Default.Equals(Value, option))
+        {
+            Value = option;
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+}

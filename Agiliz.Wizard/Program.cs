@@ -229,7 +229,7 @@ app.MapPost("/api/sessions", async (HttpRequest req) =>
         catch { /* config não encontrado, cria do zero */ }
     }
 
-    var session = store.Create(editContext);
+    var session = store.Create(BotType.Generic, editContext);
     var greeting = mode == "edit"
         ? $"Config do '{tenantId}' carregado. O que você quer alterar?"
         : "Olá! Vou te ajudar a configurar o bot. Me conta: qual é o negócio e o que ele faz?";

@@ -1,9 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Agiliz.Core.Config;
 using Agiliz.Core.LLM;
 using Agiliz.Core.Messaging;
 using Agiliz.Core.Models;
 using Agiliz.Runtime.Endpoints;
 using Agiliz.Runtime.Services;
+using Agiliz.Core.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,8 +27,19 @@ builder.Services.AddSingleton<IMessageProvider, EvolutionClient>();
 builder.Services.AddHostedService<SessionPurgeService>();
 
 // Tools
-builder.Services.AddSingleton<Agiliz.Core.Tools.IEmailSender, Agiliz.Core.Tools.SmtpEmailSender>();
-builder.Services.AddSingleton<Agiliz.Core.Tools.ITool, Agiliz.Core.Tools.SendEmailTool>();
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+builder.Services.AddSingleton<ITool, SendEmailTool>();
+
+// Database & Anti-Fraud
+var connString = builder.Configuration.GetConnectionString("DefaultConnection") 
+    ?? "Host=127.0.0.1;Port=5433;Database=evolution;Username=evolution;Password=evolution";
+
+builder.Services.AddDbContext<Agiliz.Runtime.Data.AgilizDbContext>(options =>
+    options.UseNpgsql(connString));
+
+builder.Services.AddScoped<AntiFraudService>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.VerificarAgendaTool>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.MarcarAgendaTool>();
 
 // ─── Build ────────────────────────────────────────────────────────────────────
 var app = builder.Build();
