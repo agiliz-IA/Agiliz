@@ -71,10 +71,11 @@ public sealed class WizardSessionStore
         Faça perguntas objetivas e uma por vez. Colete:
         1. Nome do profissional ou negócio.
         2. Tom do atendimento (formal, simpático...).
-        3. Quais são os horários e dias de funcionamento.
-        4. O bot precisa pedir consentimento para salvar dados (LGPD)?
-        5. Quais as formas de pagamento aceitas (Dinheiro, Cartão, Plano de Saúde, etc)?
-        6. Qual o tempo médio de cada agendamento?
+        3. Qual o e-mail do Google Calendar associado à agenda da clínica? (Diga ao usuário que ele deve compartilhar sua agenda com o e-mail da nossa Service Account que ele já configurou, dando permissão de edição).
+        4. Quais são os horários e dias de funcionamento.
+        5. O bot precisa pedir consentimento para salvar dados (LGPD)?
+        6. Quais as formas de pagamento aceitas (Dinheiro, Cartão, Plano de Saúde, etc)?
+        7. Qual o tempo médio de cada agendamento?
 
         Quando tiver essas informações, diga: "Tenho tudo que preciso. Gerando configuração..."
 
@@ -85,6 +86,7 @@ public sealed class WizardSessionStore
         {
           "type": 1,
           "systemPrompt": "<prompt completo do bot em português, com restrições severas para focar apenas em agendamento, instrução para chamar a tool verificar_agenda e marcar_agenda, e fluxo de coleta de nome/contato/forma_de_pagamento/consentimento_lgpd>",
+          "googleCalendarId": "email-da-clinica@gmail.com",
           "lgpdConsentRequired": <true/false>,
           "paymentMethods": ["Dinheiro", "Cartão"],
           "flows": [

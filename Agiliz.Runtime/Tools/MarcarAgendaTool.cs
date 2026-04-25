@@ -8,7 +8,7 @@ using Agiliz.Runtime.Data.Entities;
 
 namespace Agiliz.Runtime.Tools;
 
-public sealed class MarcarAgendaTool(IServiceProvider services) : ITool
+public sealed class MarcarAgendaTool(IServiceProvider services, GoogleCalendarService calendarService, TenantRegistry registry) : ITool
 {
     public string Name => "marcar_agenda";
     public string Description => "Registra o agendamento no sistema. Retorna sucesso ou o motivo da recusa.";
@@ -30,6 +30,14 @@ public sealed class MarcarAgendaTool(IServiceProvider services) : ITool
         var ctx = RuntimeContext.Current.Value;
         if (ctx == null) return new ToolResult("Erro interno: Contexto do usuário não encontrado.");
 
+        var tenant = registry.Get(ctx.TenantId);
+        var googleCalendarId = tenant?.Config.GoogleCalendarId;
+
+        if (string.IsNullOrEmpty(googleCalendarId))
+        {
+            return new ToolResult("O calendário Google não está configurado para esta clínica. Avise o paciente.");
+        }
+
         using var scope = services.CreateScope();
         var antiFraud = scope.ServiceProvider.GetRequiredService<AntiFraudService>();
         var db = scope.ServiceProvider.GetRequiredService<AgilizDbContext>();
@@ -46,6 +54,12 @@ public sealed class MarcarAgendaTool(IServiceProvider services) : ITool
         if (!DateTimeOffset.TryParse(dataHoraStr, out var dataHora))
             return new ToolResult("Data/Hora em formato inválido.");
 
+        // Cria no Google
+        var googleOk = await calendarService.CreateEventAsync(googleCalendarId, nome, dataHora, ctx.UserPhone);
+        if (!googleOk)
+            return new ToolResult("Erro ao salvar no Google Calendar. Tente novamente mais tarde.");
+
+        // Salva no Banco Local
         var user = await db.Users.FindAsync(new object[] { ctx.UserPhone, ctx.TenantId }, ct);
         if (user == null)
         {

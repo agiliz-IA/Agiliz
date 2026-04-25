@@ -21,6 +21,7 @@ public sealed record BotConfig
 
     public List<string> PaymentMethods { get; init; } = [];
     public bool LgpdConsentRequired { get; init; } = false;
+    public string? GoogleCalendarId { get; init; }
 }
 
 public enum BotType { Generic, Scheduling }
