@@ -138,6 +138,106 @@ public sealed class RuntimeWebhookTests : IDisposable
         sent.From.Should().Be("15005550006");
     }
 
+    // ─── Formato real da Evolution v2 (key em data.key) ──────────────────────
+
+    private static StringContent V2Payload(string instance, string remoteJid, object message, bool fromMe = false, string id = "MSG1")
+    {
+        var payload = new
+        {
+            @event = "messages.upsert",
+            instance,
+            data = new
+            {
+                key = new { remoteJid, fromMe, id },
+                pushName = "Cliente",
+                messageType = "conversation",
+                message
+            }
+        };
+        return new StringContent(JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+    }
+
+    [Fact]
+    public async Task Webhook_V2Payload_RepliesToSender()
+    {
+        using var factory = BuildFactory();
+        var payload = V2Payload("15005550006", "5521988887777@s.whatsapp.net", new { conversation = "oi" });
+
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        _fakeProvider.Sent.Should().ContainSingle(m => m.To == "5521988887777" && m.Body == "Ola! Como posso ajudar?");
+    }
+
+    [Fact]
+    public async Task Webhook_V2ExtendedTextMessage_IsRead()
+    {
+        using var factory = BuildFactory();
+        var payload = V2Payload("15005550006", "5521988887777@s.whatsapp.net",
+            new { extendedTextMessage = new { text = "oi, respondendo sua mensagem" } });
+
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        _fakeProvider.Sent.Should().ContainSingle(m => m.Body == "Ola! Como posso ajudar?");
+    }
+
+    [Fact]
+    public async Task Webhook_V2FromMe_IsIgnored()
+    {
+        using var factory = BuildFactory();
+        var payload = V2Payload("15005550006", "5521988887777@s.whatsapp.net", new { conversation = "oi" }, fromMe: true);
+
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        _fakeProvider.Sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Webhook_GroupMessage_IsIgnored()
+    {
+        using var factory = BuildFactory();
+        var payload = V2Payload("15005550006", "120363000000000000@g.us", new { conversation = "oi" });
+
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        _fakeProvider.Sent.Should().BeEmpty();
+        _fakeLlm.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Webhook_AudioWithBase64_IsTranscribedAndSentToBot()
+    {
+        var transcriber = new FakeTranscriber("quero marcar uma consulta");
+        _fakeLlm.Returns("Claro! Para qual dia?");
+        using var factory = BuildFactory().WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton<Agiliz.Core.Media.IAudioTranscriber>(transcriber)));
+
+        var payload = V2Payload("15005550006", "5521988887777@s.whatsapp.net", new
+        {
+            audioMessage = new { mimetype = "audio/ogg; codecs=opus", seconds = 4, ptt = true },
+            base64 = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+        });
+
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        transcriber.Calls.Should().Be(1);
+        _fakeLlm.ReceivedHistories.Should().ContainSingle();
+        _fakeLlm.ReceivedHistories[0].Should().Contain(m =>
+            m.Role == MessageRole.User && m.Content.Contains("quero marcar uma consulta"));
+        _fakeProvider.Sent.Should().ContainSingle(m => m.Body == "Claro! Para qual dia?");
+    }
+
+    private sealed class FakeTranscriber(string text) : Agiliz.Core.Media.IAudioTranscriber
+    {
+        public int Calls { get; private set; }
+        public bool IsEnabled => true;
+
+        public Task<string?> TranscribeAsync(Agiliz.Core.Media.MediaContent audio, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<string?>(text);
+        }
+    }
+
     public void Dispose()
     {
         _dir.Dispose();

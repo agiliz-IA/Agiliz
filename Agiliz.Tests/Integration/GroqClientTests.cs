@@ -12,7 +12,7 @@ public sealed class GroqClientTests : IDisposable
 
     private GroqClient BuildClient() =>
         new(new HttpClient(), "System prompt de teste.",
-            new LlmSettings { Provider = LlmProvider.Groq, Model = "llama-3.3-70b-versatile", MaxTokens = 300 },
+            new LlmSettings { Provider = LlmProvider.Groq, Model = "openai/gpt-oss-120b", MaxTokens = 300 },
             baseUrl: _mock.BaseUrl);  // <-- aponta para WireMock, nao para api.groq.com
 
     [Fact]
@@ -20,7 +20,7 @@ public sealed class GroqClientTests : IDisposable
     {
         _mock.SetupGroqSuccess("Ola do Groq!");
         var result = await BuildClient().CompleteAsync([ConversationMessage.User("oi")]);
-        result.Should().Be("Ola do Groq!");
+        result.Text.Should().Be("Ola do Groq!");
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public sealed class GroqClientTests : IDisposable
         };
 
         var result = await BuildClient().CompleteAsync(history);
-        result.Should().Be("ok");
+        result.Text.Should().Be("ok");
     }
 
     public void Dispose() => _mock.Dispose();

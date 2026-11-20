@@ -60,19 +60,19 @@
                     {
                         <tr>
                             <td>@entry.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                            <td><AgilizBadge Variant="primary">@entry.TenantId</AgilizBadge></td>
+                            <td><AgilizBadge Text="@entry.TenantId" ColorType="groq" /></td>
                             <td>
                                 @if (entry.Type == CostType.TokensLLM)
                                 {
-                                    <AgilizBadge Variant="success">LLM</AgilizBadge>
+                                    <AgilizBadge Text="LLM" ColorType="flow" />
                                 }
                                 else if (entry.Type == CostType.ToolExecution)
                                 {
-                                    <AgilizBadge Variant="warning">Tool</AgilizBadge>
+                                    <AgilizBadge Text="Tool" ColorType="claude" />
                                 }
                                 else
                                 {
-                                    <AgilizBadge Variant="neutral">@entry.Type.ToString()</AgilizBadge>
+                                    <AgilizBadge Text="@entry.Type.ToString()" ColorType="groq" />
                                 }
                             </td>
                             <td class="desc-cell">@entry.Description</td>

@@ -7,6 +7,7 @@ public class AgilizDbContext : DbContext
 {
     public DbSet<SchedulingUser> Users { get; set; } = null!;
     public DbSet<Appointment> Appointments { get; set; } = null!;
+    public DbSet<ConversationState> ConversationStates { get; set; } = null!;
 
     public AgilizDbContext(DbContextOptions<AgilizDbContext> options) : base(options) { }
 
@@ -20,5 +21,11 @@ public class AgilizDbContext : DbContext
 
         modelBuilder.Entity<Appointment>()
             .HasIndex(a => new { a.Phone, a.TenantId });
+
+        modelBuilder.Entity<Appointment>()
+            .HasIndex(a => new { a.TenantId, a.ScheduledTime });
+
+        modelBuilder.Entity<ConversationState>()
+            .HasKey(s => new { s.Phone, s.TenantId });
     }
 }

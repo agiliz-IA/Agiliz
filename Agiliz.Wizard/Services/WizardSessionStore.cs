@@ -89,6 +89,14 @@ public sealed class WizardSessionStore
           "googleCalendarId": "email-da-clinica@gmail.com",
           "lgpdConsentRequired": <true/false>,
           "paymentMethods": ["Dinheiro", "Cartão"],
+          "scheduling": {
+            "timeZone": "America/Sao_Paulo",
+            "appointmentDurationMinutes": 60,
+            "minimumNoticeMinutes": 120,
+            "businessHours": [
+              { "day": "Monday", "start": "08:00", "end": "18:00", "breakStart": "12:00", "breakEnd": "13:00" }
+            ]
+          },
           "flows": [
             { "trigger": "CONFIRMAR_AGENDAMENTO", "response": "Seu agendamento foi confirmado com sucesso!" },
             { "trigger": "DESMARCAR_AGENDAMENTO", "response": "Agendamento cancelado. Até a próxima." },
@@ -101,6 +109,8 @@ public sealed class WizardSessionStore
         - Instrua o bot a NUNCA fugir do escopo de agendamento (guardrail).
         - Se o usuário tentar puxar outro assunto, o bot deve perguntar educadamente se pode ajudar com algo simples de agendamento.
         - O bot deve coletar os dados na ordem, sempre perguntando um de cada vez.
+        - O bot deve pedir consentimento LGPD antes de chamar marcar_agenda quando lgpdConsentRequired for true.
+        - O bot deve usar confirmar_agendamento, cancelar_agendamento e reagendar_agendamento quando o paciente responder lembretes ou pedir alteração.
         """;
 
     private readonly ConcurrentDictionary<Guid, WizardSession> _sessions = new();
@@ -113,8 +123,8 @@ public sealed class WizardSessionStore
             Llm = new LlmSettings
             {
                 Provider = LlmProvider.Groq,
-                Model = "llama-3.3-70b-versatile",
-                MaxTokens = 2000
+                Model = ModelCatalog.DefaultGroqModel,
+                MaxTokens = 4000
             }
         };
 
@@ -141,7 +151,7 @@ public sealed class WizardSessionStore
         var reply = response.Text;
         session.History.Add(ConversationMessage.Assistant(reply));
 
-        var tokenCostUsd = (response.Usage.Prompt * 0.000003m) + (response.Usage.Completion * 0.000015m);
+        var tokenCostUsd = ModelCatalog.EstimateCostUsd(ModelCatalog.DefaultGroqModel, response.Usage);
         Agiliz.Core.Billing.BillingStore.Record(_configsDir, new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });
 
         var configReady = reply.Contains("===JSON_START===") && reply.Contains("===JSON_END===");

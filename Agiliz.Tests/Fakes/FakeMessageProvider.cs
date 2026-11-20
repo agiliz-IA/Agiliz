@@ -18,6 +18,13 @@ public sealed class FakeMessageProvider : IMessageProvider
         return Task.CompletedTask;
     }
 
+    public Task SendButtonsAsync(string toNumber, string fromNumber, string body, string[] buttons, CancellationToken ct = default)
+    {
+        var btnText = string.Join(", ", buttons);
+        Sent.Add(new SentMessage(NormalizeNumber(toNumber), NormalizeNumber(fromNumber), $"{body} [Buttons: {btnText}]"));
+        return Task.CompletedTask;
+    }
+
     public string NormalizeNumber(string number)
     {
         // Remove prefixos e símbolos

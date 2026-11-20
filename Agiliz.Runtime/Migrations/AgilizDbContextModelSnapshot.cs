@@ -28,12 +28,27 @@ namespace Agiliz.Runtime.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GoogleEventId")
+                        .HasColumnType("text");
 
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ReminderSentAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset>("ScheduledTime")
                         .HasColumnType("timestamp with time zone");
@@ -49,7 +64,34 @@ namespace Agiliz.Runtime.Migrations
 
                     b.HasIndex("Phone", "TenantId");
 
+                    b.HasIndex("TenantId", "ScheduledTime");
+
                     b.ToTable("Appointments");
+                });
+
+            modelBuilder.Entity("Agiliz.Runtime.Data.Entities.ConversationState", b =>
+                {
+                    b.Property<string>("Phone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsPaused")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastMessagePreview")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("PausedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Phone", "TenantId");
+
+                    b.ToTable("ConversationStates");
                 });
 
             modelBuilder.Entity("Agiliz.Runtime.Data.Entities.SchedulingUser", b =>

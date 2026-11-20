@@ -53,6 +53,12 @@ public sealed class TenantRegistry
     public TenantEntry? Resolve(string whatsappNumber) =>
         _byNumber.TryGetValue(whatsappNumber, out var entry) ? entry : null;
 
+    /// <summary>
+    /// Resolve o tenant pelo TenantId.
+    /// </summary>
+    public TenantEntry? Get(string tenantId) =>
+        _byNumber.Values.FirstOrDefault(e => string.Equals(e.Config.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+
     public int Count => _byNumber.Count;
 }
 

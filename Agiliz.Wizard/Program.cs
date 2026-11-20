@@ -7,9 +7,12 @@ using Agiliz.Wizard.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 var configsDir = builder.Configuration["ConfigsDir"]
-    ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+    ?? "";
+if (string.IsNullOrWhiteSpace(configsDir))
+    configsDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
 
 builder.Services.AddSingleton<WizardSessionStore>();
+builder.Services.AddHttpClient();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 builder.Services.AddServerSideBlazor()
@@ -21,7 +24,38 @@ builder.Services.AddAntiforgery();
 
 var app = builder.Build();
 
-app.UseCors();
+if (app.Environment.IsDevelopment())
+    app.UseCors();
+
+app.Use(async (context, next) =>
+{
+    var expectedPassword = app.Configuration["Wizard:AdminPassword"];
+    if (string.IsNullOrWhiteSpace(expectedPassword))
+    {
+        await next();
+        return;
+    }
+
+    var expectedUser = app.Configuration["Wizard:AdminUser"] ?? "admin";
+    var auth = context.Request.Headers.Authorization.ToString();
+    if (auth.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+    {
+        try
+        {
+            var raw = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(auth["Basic ".Length..]));
+            var parts = raw.Split(':', 2);
+            if (parts.Length == 2 && parts[0] == expectedUser && parts[1] == expectedPassword)
+            {
+                await next();
+                return;
+            }
+        }
+        catch { }
+    }
+
+    context.Response.Headers.WWWAuthenticate = "Basic realm=\"Agiliz Wizard\"";
+    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+});
 app.UseStaticFiles();
 app.UseAntiforgery();
 
@@ -96,10 +130,19 @@ app.MapPost("/api/bots", async (HttpRequest req) =>
 
     var providerStr = root.GetProperty("provider").GetString()!;
     var provider = providerStr == "Claude" ? LlmProvider.Claude : LlmProvider.Groq;
-    var model = provider == LlmProvider.Groq ? "llama-3.3-70b-versatile" : "claude-sonnet-4-20250514";
-    var maxTokens = root.TryGetProperty("maxTokens", out var mt) ? mt.GetInt32() : 300;
+    var maxTokens = root.TryGetProperty("maxTokens", out var mt) ? mt.GetInt32() : new LlmSettings().MaxTokens;
 
     var systemPrompt = root.GetProperty("systemPrompt").GetString()!;
+    var botType = root.TryGetProperty("type", out var typeEl)
+        ? (typeEl.ValueKind == JsonValueKind.String
+            ? Enum.Parse<BotType>(typeEl.GetString()!, true)
+            : (BotType)typeEl.GetInt32())
+        : BotType.Generic;
+
+    if (botType == BotType.Scheduling && provider == LlmProvider.Claude)
+        provider = LlmProvider.Groq;
+    var model = ModelCatalog.DefaultModelFor(provider);
+
     var flows = new List<FlowEntry>();
     if (root.TryGetProperty("flows", out var flowsEl))
         foreach (var f in flowsEl.EnumerateArray())
@@ -112,9 +155,18 @@ app.MapPost("/api/bots", async (HttpRequest req) =>
     var config = new BotConfig
     {
         TenantId = tenantId,
+        Type = botType,
         WhatsAppNumber = whatsappNumber,
         SystemPrompt = systemPrompt,
         Flows = flows,
+        GoogleCalendarId = root.TryGetProperty("googleCalendarId", out var cal) ? cal.GetString() : null,
+        LgpdConsentRequired = root.TryGetProperty("lgpdConsentRequired", out var lgpd) && lgpd.GetBoolean(),
+        PaymentMethods = root.TryGetProperty("paymentMethods", out var payments)
+            ? payments.EnumerateArray().Select(p => p.GetString() ?? "").Where(p => !string.IsNullOrWhiteSpace(p)).ToList()
+            : [],
+        Scheduling = root.TryGetProperty("scheduling", out var scheduling)
+            ? scheduling.Deserialize<SchedulingSettings>(jsonOpts) ?? new SchedulingSettings()
+            : new SchedulingSettings(),
         Llm = new LlmSettings { Provider = provider, Model = model, MaxTokens = maxTokens }
     };
 
@@ -153,7 +205,7 @@ app.MapPost("/api/bots/{id}/test", async (string id, HttpRequest req) =>
     history.Add(ConversationMessage.User(message));
     var llm = LlmClientFactory.Create(config, new HttpClient());
     var reply = await llm.CompleteAsync(history);
-    return Results.Json(new { reply, flowMatch = (string?)null }, jsonOpts);
+    return Results.Json(new { reply = reply.Text, flowMatch = (string?)null }, jsonOpts);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

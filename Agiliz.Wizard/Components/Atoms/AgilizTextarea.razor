@@ -7,8 +7,8 @@
     <textarea class="form-input" 
               rows="@Rows"
               placeholder="@Placeholder"
-              @bind="Value" 
-              @bind:event="oninput"></textarea>
+              value="@Value"
+              @oninput="OnInput"></textarea>
 
     @if (!string.IsNullOrEmpty(Hint))
     {
@@ -22,19 +22,9 @@
     [Parameter] public string Placeholder { get; set; } = "";
     [Parameter] public int Rows { get; set; } = 5;
     
-    private string _value = "";
-    [Parameter] 
-    public string Value 
-    { 
-        get => _value; 
-        set 
-        { 
-            if (_value != value) 
-            { 
-                _value = value; 
-                ValueChanged.InvokeAsync(value); 
-            } 
-        } 
-    }
+    [Parameter] public string Value { get; set; } = "";
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private Task OnInput(ChangeEventArgs e) =>
+        ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
 }

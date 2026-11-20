@@ -11,7 +11,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ─── Configs dir: raiz da solução /configs ────────────────────────────────────
 var configsDir = builder.Configuration["ConfigsDir"]
-    ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+    ?? "";
+if (string.IsNullOrWhiteSpace(configsDir))
+    configsDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
 
 // ─── Serviços ─────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton(sp =>
@@ -24,6 +26,11 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<BotRunner>();
 builder.Services.AddSingleton<IMessageProvider, EvolutionClient>();
+
+// Transcrição de áudio (notas de voz) via Whisper no Groq. Desliga com Audio:TranscriptionEnabled=false.
+builder.Services.AddSingleton<Agiliz.Core.Media.IAudioTranscriber>(_ =>
+    new Agiliz.Core.Media.GroqWhisperTranscriber(
+        enabled: builder.Configuration.GetValue("Audio:TranscriptionEnabled", true)));
 builder.Services.AddHostedService<SessionPurgeService>();
 
 // Tools
@@ -38,8 +45,14 @@ builder.Services.AddDbContext<Agiliz.Runtime.Data.AgilizDbContext>(options =>
     options.UseNpgsql(connString));
 
 builder.Services.AddScoped<AntiFraudService>();
+builder.Services.AddSingleton<GoogleCalendarService>();
 builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.VerificarAgendaTool>();
 builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.MarcarAgendaTool>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.ConfirmarAgendamentoTool>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.CancelarAgendamentoTool>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.ReagendarAgendamentoTool>();
+builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.PausarBotTool>();
+builder.Services.AddHostedService<ReminderBackgroundService>();
 
 // ─── Build ────────────────────────────────────────────────────────────────────
 var app = builder.Build();
@@ -48,6 +61,24 @@ var app = builder.Build();
 var registry = app.Services.GetRequiredService<TenantRegistry>();
 if (registry.Count == 0)
     app.Logger.LogWarning("Runtime iniciado sem nenhum bot ativo. Adicione configs e reinicie.");
+
+if (app.Environment.IsProduction())
+{
+    var evolutionUrl = app.Configuration["Evolution:ApiUrl"];
+    var evolutionToken = app.Configuration["Evolution:ApiToken"];
+    if (string.IsNullOrWhiteSpace(evolutionUrl) ||
+        string.IsNullOrWhiteSpace(evolutionToken) ||
+        evolutionToken.StartsWith("change-me", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Evolution:ApiUrl e Evolution:ApiToken devem estar configurados em producao.");
+}
+
+if (app.Configuration.GetValue("Database:AutoMigrate", false))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Agiliz.Runtime.Data.AgilizDbContext>();
+    await db.Database.MigrateAsync();
+    app.Logger.LogInformation("Migrations do Agiliz.Runtime aplicadas.");
+}
 
 // ─── Endpoints ────────────────────────────────────────────────────────────────
 WhatsAppWebhook.Map(app);

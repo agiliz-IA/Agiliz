@@ -8,7 +8,7 @@ namespace Agiliz.Runtime.Services;
 /// </summary>
 public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools, Microsoft.Extensions.Configuration.IConfiguration config)
 {
-    public async Task<string> ProcessAsync(
+    public async Task<string?> ProcessAsync(
         TenantEntry tenant,
         string userPhone,
         string messageBody,
@@ -17,6 +17,16 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
         RuntimeContext.Current.Value = new RuntimeContextData(tenant.Config.TenantId, userPhone);
 
         var body = messageBody.Trim();
+
+        // ─── 2. Guard Rails & LLM ──────────────────────────────────
+        var sessionState = sessions.AddAndGet(tenant.Config.TenantId, userPhone, ConversationMessage.User(body));
+
+        // Se a sessão está pausada, ignoramos a mensagem (o humano está no controle)
+        if (sessionState.IsPaused)
+        {
+            logger.LogInformation("[{Tenant}] Sessão pausada para {Phone}. Ignorando mensagem.", tenant.Config.TenantId, userPhone);
+            return null;
+        }
 
         // ─── 1. Flow match (sem chamar o LLM) ────────────────────────────────
         var flow = tenant.Config.Flows.FirstOrDefault(f =>
@@ -28,9 +38,6 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
             return flow.Response;
         }
 
-        // ─── 2. Guard Rails & LLM ──────────────────────────────────
-        var sessionState = sessions.AddAndGet(userPhone, ConversationMessage.User(body));
-
         if (sessionState.TurnCount > tenant.Config.GuardRails.MaxSessionTurns || 
             sessionState.AccumulatedCostUsd > tenant.Config.GuardRails.MaxSessionSpendUsd)
         {
@@ -38,35 +45,46 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
                 tenant.Config.TenantId, userPhone, sessionState.TurnCount, tenant.Config.GuardRails.MaxSessionTurns, 
                 sessionState.AccumulatedCostUsd, tenant.Config.GuardRails.MaxSessionSpendUsd);
             
+            sessions.PauseSession(tenant.Config.TenantId, userPhone);
             return tenant.Config.GuardRails.FallbackMessage;
         }
 
         try
         {
-            var activeTools = tools.Where(t => 
-                (tenant.Config.Type == BotType.Scheduling) || 
-                (tenant.Config.Type != BotType.Scheduling && t.Name != "verificar_agenda" && t.Name != "marcar_agenda")
-            ).ToList();
+            var activeTools = tenant.Config.Type == BotType.Scheduling && tenant.Config.Llm.Provider == LlmProvider.Groq
+                ? tools.ToList()
+                : tools.Where(t => !SchedulingToolNames.Contains(t.Name)).ToList();
 
-            var response = await tenant.LlmClient.CompleteAsync(sessionState.History, activeTools, ct);
+            // Contexto dinâmico (data/hora local) vai como mensagem de sistema só para esta chamada:
+            // sem ele o modelo não sabe o que é "amanhã" nem "sexta que vem".
+            var llmHistory = new List<ConversationMessage>(sessionState.History.Count + 1)
+            {
+                new() { Role = MessageRole.System, Content = BuildTimeContext(tenant.Config, DateTimeOffset.UtcNow) }
+            };
+            llmHistory.AddRange(sessionState.History);
+
+            var response = await tenant.LlmClient.CompleteAsync(llmHistory, activeTools, ct);
             var reply = response.Text;
-            sessions.AddAssistantReply(userPhone, reply);
+
+            if (string.IsNullOrWhiteSpace(reply))
+            {
+                logger.LogWarning("[{Tenant}] LLM devolveu resposta vazia para {Phone}", tenant.Config.TenantId, userPhone);
+                reply = "Desculpe, não consegui entender. Pode reformular sua mensagem?";
+            }
+
+            sessions.AddAssistantReply(tenant.Config.TenantId, userPhone, reply);
             logger.LogInformation("[{Tenant}] LLM respondeu ({Chars} chars)", tenant.Config.TenantId, reply.Length);
-            
-            // Faturamento
-            var tokenCostUsd = (response.Usage.Prompt * 0.000003m) + (response.Usage.Completion * 0.000015m);
+
+            // Faturamento: preço real do modelo usado (antes era fixo em US$ 3/15 por 1M tokens)
+            var tokenCostUsd = Agiliz.Core.LLM.ModelCatalog.EstimateCostUsd(tenant.Config.Llm.Model, response.Usage);
             var totalOpCost = tokenCostUsd + response.ToolCosts.Sum(t => t.Cost);
             
-            sessions.AddCost(userPhone, totalOpCost);
-            
-            var dir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
-            
-            Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenant.Config.TenantId, Type = CostType.TokensLLM, Description = $"Inference ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });
-            
+            sessions.AddCost(tenant.Config.TenantId, userPhone, totalOpCost);
+
+            RecordCost(tenant.Config.TenantId, CostType.TokensLLM, $"Inference {tenant.Config.Llm.Model} ({response.Usage.Total} tok)", tokenCostUsd);
+
             foreach(var tc in response.ToolCosts)
-            {
-                Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenant.Config.TenantId, Type = CostType.ToolExecution, Description = $"Tool: {tc.ToolName}", AmountUsd = tc.Cost });
-            }
+                RecordCost(tenant.Config.TenantId, CostType.ToolExecution, $"Tool: {tc.ToolName}", tc.Cost);
 
             return reply;
         }
@@ -76,4 +94,45 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
             return "Desculpe, tive um problema técnico. Pode tentar novamente em instantes?";
         }
     }
+
+    /// <summary>Registra um custo do tenant no billing (LLM, tools, transcrição...).</summary>
+    public void RecordCost(string tenantId, CostType type, string description, decimal amountUsd)
+    {
+        try
+        {
+            var dir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenantId, Type = type, Description = description, AmountUsd = amountUsd });
+        }
+        catch (Exception ex)
+        {
+            // Falha de billing não pode derrubar o atendimento.
+            logger.LogError(ex, "[{Tenant}] Falha ao registrar custo '{Description}'", tenantId, description);
+        }
+    }
+
+    private static readonly System.Globalization.CultureInfo PtBr = new("pt-BR");
+
+    /// <summary>Texto curto com data/hora local do negócio para ancorar o LLM no tempo.</summary>
+    public static string BuildTimeContext(BotConfig config, DateTimeOffset utcNow)
+    {
+        var timeZoneId = string.IsNullOrWhiteSpace(config.Scheduling.TimeZone) ? "America/Sao_Paulo" : config.Scheduling.TimeZone;
+        TimeSpan offset;
+        try { offset = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId).GetUtcOffset(utcNow); }
+        catch { offset = TimeSpan.FromHours(-3); }
+
+        var local = utcNow.ToOffset(offset);
+        var sign = offset < TimeSpan.Zero ? "-" : "+";
+        return $"Agora é {local.ToString("dddd, dd/MM/yyyy 'às' HH:mm", PtBr)} (fuso {timeZoneId}, UTC{sign}{offset:hh\\:mm}). " +
+               $"Use esta data como referência para \"hoje\", \"amanhã\" e dias da semana. " +
+               $"Ao chamar ferramentas, envie datas em ISO 8601 com o fuso (ex.: {local:yyyy-MM-dd}T14:00:00{sign}{offset:hh\\:mm}).";
+    }
+
+    private static readonly HashSet<string> SchedulingToolNames =
+    [
+        "verificar_agenda",
+        "marcar_agenda",
+        "confirmar_agendamento",
+        "cancelar_agendamento",
+        "reagendar_agendamento"
+    ];
 }

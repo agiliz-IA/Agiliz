@@ -22,6 +22,14 @@
             Telemetria
         </button>
 
+        <button class="nav-item @(IsActive("handoff") ? "active" : "")" @onclick='() => NavigateTo("handoff")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 4.5h10M3 8h7M3 11.5h5"></path>
+                <circle cx="12" cy="11.5" r="2"></circle>
+            </svg>
+            Atendimentos
+        </button>
+
         <button class="nav-item @(IsActive("billing") ? "active" : "")" @onclick='() => NavigateTo("billing")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="2" y="3" width="12" height="10" rx="2" ry="2"></rect>

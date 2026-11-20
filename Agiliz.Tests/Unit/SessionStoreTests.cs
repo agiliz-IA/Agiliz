@@ -42,6 +42,15 @@ public sealed class SessionStoreTests
         bobHistory.Should().ContainSingle(m => m.Content == "bob");
     }
 
+    [Fact]
+    public void AddAndGet_DifferentTenants_AreIsolatedForSamePhone()
+    {
+        _store.AddAndGet("tenant-a", Phone, ConversationMessage.User("mensagem tenant a"));
+        var tenantBHistory = _store.AddAndGet("tenant-b", Phone, ConversationMessage.User("mensagem tenant b")).History;
+
+        tenantBHistory.Should().ContainSingle(m => m.Content == "mensagem tenant b");
+    }
+
     // ─── Janela deslizante ────────────────────────────────────────────────────
 
     [Fact]

@@ -20,7 +20,7 @@ public sealed class ClaudeClientTests : IDisposable
     {
         _mock.SetupClaudeSuccess("Ola do Claude!");
         var result = await BuildClient().CompleteAsync([ConversationMessage.User("oi")]);
-        result.Should().Be("Ola do Claude!");
+        result.Text.Should().Be("Ola do Claude!");
     }
 
     [Fact]

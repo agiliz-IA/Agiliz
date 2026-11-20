@@ -110,8 +110,8 @@
                         Llama 3 (Groq - Rápido)
                     </label>
                     <label class="provider-option @(_provider == "Claude" ? "selected" : "")" @onclick='() => _provider = "Claude"'>
-                        <input type="radio" value="Claude" checked="@(_provider == "Claude")" />
-                        Claude Sonnet (Mais inteligente)
+                        <input type="radio" value="Claude" checked="@(_provider == "Claude")" disabled="@(_extractedConfig?.Type == BotType.Scheduling)" />
+                        Claude Sonnet (indisponÃ­vel para agendamento no piloto)
                     </label>
                 </div>
                 
@@ -241,6 +241,9 @@
     {
         if (_extractedConfig != null)
         {
+            if (_extractedConfig.Type == BotType.Scheduling)
+                _provider = "Groq";
+
             var preview = new {
                 tenantId = _tenantId,
                 whatsappNumber = _whatsAppNumber,
@@ -249,9 +252,10 @@
                 googleCalendarId = _extractedConfig.GoogleCalendarId,
                 lgpdConsentRequired = _extractedConfig.LgpdConsentRequired,
                 paymentMethods = _extractedConfig.PaymentMethods,
+                scheduling = _extractedConfig.Scheduling,
                 systemPrompt = _extractedConfig.SystemPrompt,
                 flows = _extractedConfig.Flows,
-                llm = new { model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-sonnet-4", maxTokens = 300 }
+                llm = new { model = Agiliz.Core.LLM.ModelCatalog.DefaultModelFor(_provider == "Claude" ? LlmProvider.Claude : LlmProvider.Groq), maxTokens = new LlmSettings().MaxTokens }
             };
             
             _jsonPreview = JsonSerializer.Serialize(preview, new JsonSerializerOptions { WriteIndented = true });
@@ -275,10 +279,12 @@
             Flows = _extractedConfig.Flows,
             PaymentMethods = _extractedConfig.PaymentMethods,
             LgpdConsentRequired = _extractedConfig.LgpdConsentRequired,
+            GoogleCalendarId = _extractedConfig.GoogleCalendarId,
+            Scheduling = _extractedConfig.Scheduling,
             Llm = new LlmSettings { 
-                Provider = Enum.Parse<LlmProvider>(_provider, true), 
-                Model = _provider == "Groq" ? "llama-3.3-70b-versatile" : "claude-3-5-sonnet-20241022",
-                MaxTokens = 300
+                Provider = _extractedConfig.Type == BotType.Scheduling ? LlmProvider.Groq : Enum.Parse<LlmProvider>(_provider, true), 
+                Model = Agiliz.Core.LLM.ModelCatalog.DefaultModelFor(_extractedConfig.Type == BotType.Scheduling || _provider == "Groq" ? LlmProvider.Groq : LlmProvider.Claude),
+                MaxTokens = new LlmSettings().MaxTokens
             }
         };
 

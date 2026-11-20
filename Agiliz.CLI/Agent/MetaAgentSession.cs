@@ -65,8 +65,8 @@ public sealed class MetaAgentSession
             Llm = new LlmSettings
             {
                 Provider = LlmProvider.Groq,
-                Model = "llama-3.3-70b-versatile",
-                MaxTokens = 2000
+                Model = Agiliz.Core.LLM.ModelCatalog.DefaultGroqModel,
+                MaxTokens = 4000
             }
         };
 

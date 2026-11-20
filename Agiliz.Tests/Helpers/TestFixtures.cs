@@ -22,7 +22,7 @@ public static class TestFixtures
         Llm = new LlmSettings
         {
             Provider = provider,
-            Model = "llama-3.3-70b-versatile",
+            Model = "openai/gpt-oss-120b",
             MaxTokens = 300
         }
     };

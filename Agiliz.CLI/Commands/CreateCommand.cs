@@ -39,9 +39,7 @@ public static class CreateCommand
 
         var llmProvider = provider.StartsWith("Groq") ? LlmProvider.Groq : LlmProvider.Claude;
 
-        var model = llmProvider == LlmProvider.Groq
-            ? "llama-3.3-70b-versatile"
-            : "claude-sonnet-4-20250514";
+        var model = Agiliz.Core.LLM.ModelCatalog.DefaultModelFor(llmProvider);
 
         // ─── 4. Entrevista com o meta-agente ──────────────────────────────────
         AnsiConsole.WriteLine();
@@ -87,7 +85,7 @@ public static class CreateCommand
             {
                 Provider = llmProvider,
                 Model = model,
-                MaxTokens = 300
+                MaxTokens = new LlmSettings().MaxTokens
             }
         };
 

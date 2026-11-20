@@ -44,7 +44,7 @@ public sealed class VerificarAgendaTool(GoogleCalendarService calendarService, T
         if (!DateTimeOffset.TryParse(dataStr, out var data))
             return new ToolResult("Formato de data inválido. Use AAAA-MM-DD.");
 
-        var livres = await calendarService.GetAvailableSlotsAsync(googleCalendarId, data);
+        var livres = await calendarService.GetAvailableSlotsAsync(googleCalendarId, data, tenant!.Config.Scheduling, ct);
         
         var jsonResponse = JsonSerializer.Serialize(new { data = dataStr, disponivel = livres });
         return new ToolResult(jsonResponse);

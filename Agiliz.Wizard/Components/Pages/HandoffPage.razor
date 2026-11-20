@@ -1,0 +1,108 @@
+@page "/handoff"
+@using System.Net.Http.Json
+@using Agiliz.Wizard.Components.Atoms
+@inject IHttpClientFactory HttpClientFactory
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Atendimentos</div>
+        <div class="page-sub">conversas pausadas para intervencao humana</div>
+    </div>
+    <AgilizButton Variant="ghost" OnClick="LoadAsync" Disabled="_loading">Atualizar</AgilizButton>
+</div>
+
+<div class="handoff-grid">
+    @if (_loading)
+    {
+        <div class="empty-state">Carregando atendimentos...</div>
+    }
+    else if (_error is not null)
+    {
+        <div class="empty-state">@_error</div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="empty-state">Nenhuma conversa pausada agora.</div>
+    }
+    else
+    {
+        @foreach (var item in _items)
+        {
+            <section class="handoff-card">
+                <div>
+                    <div class="handoff-title">@item.Phone</div>
+                    <div class="handoff-meta">@item.TenantId</div>
+                </div>
+                <div class="handoff-preview">@item.LastMessagePreview</div>
+                <textarea class="handoff-input" @bind="item.Draft" placeholder="Mensagem do atendente"></textarea>
+                <div class="handoff-actions">
+                    <AgilizButton Variant="primary" Small="true" OnClick="() => SendHumanMessageAsync(item)">Enviar</AgilizButton>
+                    <AgilizButton Variant="ghost" Small="true" OnClick="() => ResumeAsync(item)">Retomar bot</AgilizButton>
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private bool _loading;
+    private string? _error;
+    private List<HandoffItem> _items = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var client = RuntimeClient();
+            _items = await client.GetFromJsonAsync<List<HandoffItem>>("/api/handoff/paused") ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = $"Nao foi possivel carregar o Runtime: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SendHumanMessageAsync(HandoffItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Draft)) return;
+        var client = RuntimeClient();
+        await client.PostAsJsonAsync($"/api/handoff/{Uri.EscapeDataString(item.TenantId)}/{Uri.EscapeDataString(item.Phone)}/message", new { body = item.Draft });
+        item.Draft = "";
+        await JS.InvokeVoidAsync("toast", "Mensagem enviada.", "success");
+    }
+
+    private async Task ResumeAsync(HandoffItem item)
+    {
+        var client = RuntimeClient();
+        await client.PostAsync($"/api/handoff/{Uri.EscapeDataString(item.TenantId)}/{Uri.EscapeDataString(item.Phone)}/resume", null);
+        _items.Remove(item);
+        await JS.InvokeVoidAsync("toast", "Bot retomado.", "success");
+    }
+
+    private HttpClient RuntimeClient()
+    {
+        var client = HttpClientFactory.CreateClient();
+        client.BaseAddress = new Uri((Config["Runtime:ApiUrl"] ?? "http://localhost:5000").TrimEnd('/'));
+        return client;
+    }
+
+    private sealed class HandoffItem
+    {
+        public string TenantId { get; set; } = "";
+        public string Phone { get; set; } = "";
+        public DateTimeOffset? PausedAt { get; set; }
+        public DateTimeOffset LastActivityAt { get; set; }
+        public string? LastMessagePreview { get; set; }
+        public string Draft { get; set; } = "";
+    }
+}

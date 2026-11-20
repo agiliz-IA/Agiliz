@@ -1,0 +1,48 @@
+.handoff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.handoff-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    background: var(--surface);
+    display: grid;
+    gap: 12px;
+}
+
+.handoff-title {
+    font-weight: 700;
+    color: var(--text);
+}
+
+.handoff-meta,
+.handoff-preview {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.handoff-input {
+    min-height: 92px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.handoff-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.empty-state {
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+}

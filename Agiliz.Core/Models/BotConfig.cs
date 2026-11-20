@@ -22,9 +22,34 @@ public sealed record BotConfig
     public List<string> PaymentMethods { get; init; } = [];
     public bool LgpdConsentRequired { get; init; } = false;
     public string? GoogleCalendarId { get; init; }
+    public SchedulingSettings Scheduling { get; init; } = new();
 }
 
 public enum BotType { Generic, Scheduling }
+
+public sealed class SchedulingSettings
+{
+    public string TimeZone { get; init; } = "America/Sao_Paulo";
+    public int AppointmentDurationMinutes { get; init; } = 60;
+    public int MinimumNoticeMinutes { get; init; } = 120;
+    public List<BusinessHourRule> BusinessHours { get; init; } =
+    [
+        new() { Day = DayOfWeek.Monday, Start = "08:00", End = "18:00", BreakStart = "12:00", BreakEnd = "13:00" },
+        new() { Day = DayOfWeek.Tuesday, Start = "08:00", End = "18:00", BreakStart = "12:00", BreakEnd = "13:00" },
+        new() { Day = DayOfWeek.Wednesday, Start = "08:00", End = "18:00", BreakStart = "12:00", BreakEnd = "13:00" },
+        new() { Day = DayOfWeek.Thursday, Start = "08:00", End = "18:00", BreakStart = "12:00", BreakEnd = "13:00" },
+        new() { Day = DayOfWeek.Friday, Start = "08:00", End = "18:00", BreakStart = "12:00", BreakEnd = "13:00" }
+    ];
+}
+
+public sealed class BusinessHourRule
+{
+    public DayOfWeek Day { get; init; }
+    public string Start { get; init; } = "08:00";
+    public string End { get; init; } = "18:00";
+    public string? BreakStart { get; init; }
+    public string? BreakEnd { get; init; }
+}
 
 public sealed class GuardRailSettings
 {
@@ -45,10 +70,13 @@ public sealed class FlowEntry
 public sealed class LlmSettings
 {
     public LlmProvider Provider { get; init; } = LlmProvider.Groq;
-    public string Model { get; init; } = "llama-3.3-70b-versatile";
+    public string Model { get; init; } = Agiliz.Core.LLM.ModelCatalog.DefaultGroqModel;
 
-    /// <summary>Limite de tokens na resposta. Mantém o custo baixo.</summary>
-    public int MaxTokens { get; init; } = 300;
+    /// <summary>
+    /// Limite de tokens na resposta (inclui o raciocínio dos modelos gpt-oss).
+    /// 800 dá folga para o raciocínio "low" sem cortar a resposta; o custo extra é ~US$ 0,0003 por turno.
+    /// </summary>
+    public int MaxTokens { get; init; } = 800;
 }
 
 public enum LlmProvider { Groq, Claude }

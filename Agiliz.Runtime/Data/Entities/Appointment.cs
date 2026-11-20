@@ -14,6 +14,11 @@ public class Appointment
     public string Phone { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
     public DateTimeOffset ScheduledTime { get; set; }
+    public int DurationMinutes { get; set; } = 60;
     public AppointmentStatus Status { get; set; } = AppointmentStatus.Pending;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ReminderSentAt { get; set; }
+    public DateTimeOffset? ConfirmedAt { get; set; }
+    public DateTimeOffset? CancelledAt { get; set; }
+    public string? GoogleEventId { get; set; }
 }

@@ -12,6 +12,9 @@ public sealed class GroqClient : ILlmClient
     private readonly LlmSettings _settings;
     private readonly string _endpoint;
 
+    /// <summary>Número máximo de rodadas com tools antes de forçar uma resposta em texto.</summary>
+    private const int MaxToolRounds = 5;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -33,16 +36,23 @@ public sealed class GroqClient : ILlmClient
         CancellationToken ct = default)
     {
         var currentHistory = history.ToList(); // Cópia mutável para o loop
-        
+
         var totalPromptTokens = 0;
         var totalCompletionTokens = 0;
         var toolCosts = new List<ToolExecutionCost>();
-        
-        while (true)
+
+        // Modelos desligados pelo Groq são trocados pelo substituto recomendado (ver ModelCatalog).
+        var model = ModelCatalog.Resolve(_settings.Model);
+        var isReasoningModel = ModelCatalog.IsGroqReasoningModel(model);
+
+        for (var round = 0; ; round++)
         {
             var messages = BuildMessages(currentHistory);
+
+            // Trava de segurança: evita loop infinito de tool calls (e conta infinita).
+            var allowTools = round < MaxToolRounds;
             
-            var groqTools = tools?.Count > 0 ? tools.Select(t => new
+            var groqTools = allowTools && tools?.Count > 0 ? tools.Select(t => new
             {
                 type = "function",
                 function = new
@@ -55,10 +65,14 @@ public sealed class GroqClient : ILlmClient
 
             var body = new
             {
-                model = _settings.Model,
-                max_tokens = _settings.MaxTokens,
+                model,
+                max_completion_tokens = _settings.MaxTokens,
                 messages,
-                tools = groqTools
+                tools = groqTools,
+                // gpt-oss raciocina antes de responder; "low" mantém custo e latência baixos
+                // e include_reasoning=false evita trafegar o raciocínio (ele continua sendo cobrado).
+                reasoning_effort = isReasoningModel ? "low" : null,
+                include_reasoning = isReasoningModel ? false : (bool?)null
             };
 
             var response = await _http.PostAsJsonAsync(_endpoint, body, JsonOpts, ct);
@@ -130,7 +144,11 @@ public sealed class GroqClient : ILlmClient
 
         foreach (var msg in history)
         {
-            if (msg.Role == MessageRole.User)
+            if (msg.Role == MessageRole.System)
+            {
+                list.Add(new { role = "system", content = msg.Content });
+            }
+            else if (msg.Role == MessageRole.User)
             {
                 list.Add(new { role = "user", content = msg.Content });
             }

@@ -15,6 +15,18 @@ public interface IMessageProvider
     /// <param name="ct">Token de cancelamento</param>
     Task SendAsync(string toNumber, string fromNumber, string body, CancellationToken ct = default);
 
+    /// <summary>
+    /// Envia uma mensagem com botões interativos.
+    /// </summary>
+    Task SendButtonsAsync(string toNumber, string fromNumber, string body, string[] buttons, CancellationToken ct = default);
+
     /// <summary>Normaliza número para formato padrão (apenas dígitos).</summary>
     string NormalizeNumber(string number);
+
+    /// <summary>
+    /// Baixa a mídia (áudio, imagem...) de uma mensagem recebida.
+    /// Retorna null quando o provedor não suporta ou a mídia não está mais disponível.
+    /// </summary>
+    Task<Agiliz.Core.Media.MediaContent?> DownloadMediaAsync(string instance, string messageId, CancellationToken ct = default) =>
+        Task.FromResult<Agiliz.Core.Media.MediaContent?>(null);
 }

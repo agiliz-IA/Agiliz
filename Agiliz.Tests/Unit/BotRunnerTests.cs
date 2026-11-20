@@ -108,8 +108,8 @@ public sealed class BotRunnerTests
         await _runner.ProcessAsync(Tenant(config), "+5521999", "mensagem 1");
         await _runner.ProcessAsync(Tenant(config), "+5521999", "mensagem 2");
 
-        var lastHistory = _llm.ReceivedHistories[1];
-        lastHistory.Should().HaveCount(4); // user1, assistant1, user2
+        var lastHistory = Conversation(_llm.ReceivedHistories[1]);
+        lastHistory.Should().HaveCount(3); // user1, assistant1, user2 (snapshot no momento da chamada)
         lastHistory[0].Content.Should().Be("mensagem 1");
         lastHistory[1].Role.Should().Be(MessageRole.Assistant);
         lastHistory[2].Content.Should().Be("mensagem 2");
@@ -153,8 +153,50 @@ public sealed class BotRunnerTests
         var result = await _runner.ProcessAsync(Tenant(config), "+5521999", "msg2");
 
         // Apenas msg1 e msg2 no histórico, sem lixo do erro
-        var lastHistory = _llm.ReceivedHistories[1];
-        lastHistory.Should().HaveCount(3);
+        var lastHistory = Conversation(_llm.ReceivedHistories[1]);
+        lastHistory.Should().HaveCount(2);
         result.Should().Be("Recuperado.");
     }
+
+    // ─── Contexto de data/hora ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ProcessAsync_SendsTimeContextAsFirstSystemMessage()
+    {
+        var config = TestFixtures.DefaultConfig();
+        _llm.Returns("ok");
+
+        await _runner.ProcessAsync(Tenant(config), "+5521999", "quero marcar amanhã");
+
+        var first = _llm.ReceivedHistories[0][0];
+        first.Role.Should().Be(MessageRole.System);
+        first.Content.Should().Contain("America/Sao_Paulo");
+    }
+
+    [Fact]
+    public void BuildTimeContext_UsesBusinessTimeZone()
+    {
+        var config = TestFixtures.DefaultConfig();
+        var utc = new DateTimeOffset(2026, 11, 20, 15, 30, 0, TimeSpan.Zero);
+
+        var text = BotRunner.BuildTimeContext(config, utc);
+
+        text.Should().Contain("20/11/2026 às 12:30");
+        text.Should().Contain("UTC-03:00");
+        text.Should().Contain("2026-11-20T14:00:00-03:00");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenLlmReturnsEmpty_ReturnsGentleFallback()
+    {
+        var config = TestFixtures.DefaultConfig();
+        _llm.Returns("   ");
+
+        var result = await _runner.ProcessAsync(Tenant(config), "+5521999", "oi?");
+
+        result.Should().Contain("reformular");
+    }
+
+    private static List<ConversationMessage> Conversation(IReadOnlyList<ConversationMessage> history) =>
+        history.Where(m => m.Role != MessageRole.System).ToList();
 }
