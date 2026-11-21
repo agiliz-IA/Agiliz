@@ -30,6 +30,14 @@
             Atendimentos
         </button>
 
+        <button class="nav-item @(IsActive("integrations") ? "active" : "")" @onclick='() => NavigateTo("integrations")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="4" cy="4" r="2"></circle><circle cx="12" cy="4" r="2"></circle><circle cx="8" cy="12" r="2"></circle>
+                <path d="M5.5 5.5L7 10.5M10.5 5.5L9 10.5M6 4h4"></path>
+            </svg>
+            Integrações
+        </button>
+
         <button class="nav-item @(IsActive("billing") ? "active" : "")" @onclick='() => NavigateTo("billing")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="2" y="3" width="12" height="10" rx="2" ry="2"></rect>

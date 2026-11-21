@@ -15,6 +15,11 @@ public interface IAudioTranscriber
 
     /// <returns>Texto transcrito, ou null se não foi possível transcrever.</returns>
     Task<string?> TranscribeAsync(MediaContent audio, CancellationToken ct = default);
+
+    /// <summary>Confere se a transcrição funciona (botão "Testar conexão").</summary>
+    Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckAsync(CancellationToken ct = default) =>
+        Task.FromResult(new Agiliz.Core.Integrations.IntegrationTestResult(IsEnabled,
+            IsEnabled ? "Transcrição ligada no servidor." : "Transcrição desligada no servidor."));
 }
 
 /// <summary>
@@ -25,6 +30,7 @@ public sealed class GroqWhisperTranscriber : IAudioTranscriber
 {
     private readonly HttpClient _http;
     private readonly string _endpoint;
+    private readonly string _modelsEndpoint;
     private readonly bool _enabled;
 
     public GroqWhisperTranscriber(HttpClient? http = null, string? apiKey = null, string? baseUrl = null, bool enabled = true)
@@ -34,10 +40,32 @@ public sealed class GroqWhisperTranscriber : IAudioTranscriber
         _enabled = enabled && !string.IsNullOrWhiteSpace(apiKey);
         if (_enabled)
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        _endpoint = $"{(baseUrl ?? "https://api.groq.com").TrimEnd('/')}/openai/v1/audio/transcriptions";
+        var root = (baseUrl ?? "https://api.groq.com").TrimEnd('/');
+        _endpoint = $"{root}/openai/v1/audio/transcriptions";
+        _modelsEndpoint = $"{root}/openai/v1/models";
     }
 
     public bool IsEnabled => _enabled;
+
+    /// <summary>Lista os modelos do Groq: valida a chave sem gastar com transcrição.</summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckAsync(CancellationToken ct = default)
+    {
+        if (!_enabled)
+            return new(false, "Transcrição desligada no servidor: falta GROQ_API_KEY ou Audio:TranscriptionEnabled=false.");
+        try
+        {
+            using var response = await _http.GetAsync(_modelsEndpoint, ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return new(false, "O Groq recusou a chave (GROQ_API_KEY inválida).");
+            return response.IsSuccessStatusCode
+                ? new(true, "Groq respondeu: transcrição de áudio pronta.")
+                : new(false, $"O Groq respondeu HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new(false, $"Sem acesso ao Groq: {ex.Message}");
+        }
+    }
 
     public async Task<string?> TranscribeAsync(MediaContent audio, CancellationToken ct = default)
     {

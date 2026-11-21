@@ -108,6 +108,10 @@ namespace Agiliz.Runtime.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<string>("IntegrationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(64)

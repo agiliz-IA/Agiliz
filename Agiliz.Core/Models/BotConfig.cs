@@ -23,6 +23,28 @@ public sealed record BotConfig
     public bool LgpdConsentRequired { get; init; } = false;
     public string? GoogleCalendarId { get; init; }
     public SchedulingSettings Scheduling { get; init; } = new();
+
+    /// <summary>
+    /// Integrações ligadas no painel, por id do catálogo (<see cref="Agiliz.Core.Integrations.IntegrationCatalog"/>).
+    /// Null = bot criado antes do catálogo: o que vale é derivado do resto do config (ver BotIntegrations).
+    /// </summary>
+    public Dictionary<string, IntegrationSettings>? Integrations { get; init; }
+
+    /// <summary>Quanto cobramos do cliente por mês (R$). Usado na margem do Financeiro; virá do plano na fase 2.</summary>
+    public decimal? MonthlyPriceBrl { get; init; }
+}
+
+public sealed class IntegrationSettings
+{
+    public bool Enabled { get; init; }
+
+    /// <summary>Valores dos campos da integração (ex.: calendarId).</summary>
+    public Dictionary<string, string> Fields { get; init; } = [];
+
+    /// <summary>Ids dos passos do cliente já feitos.</summary>
+    public List<string> CompletedSteps { get; init; } = [];
+
+    public DateTimeOffset? UpdatedAt { get; init; }
 }
 
 public enum BotType { Generic, Scheduling }

@@ -12,6 +12,8 @@ var movedBots = BotConfigLoader.MigrateLegacyLayout(configsDir);
 builder.Services.AddSingleton<WizardSessionStore>();
 builder.Services.AddHttpClient();
 RuntimeApiClient.Register(builder.Services);
+builder.Services.AddSingleton<BotIntegrationService>();
+builder.Services.AddSingleton<CostSettings>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 builder.Services.AddServerSideBlazor()
@@ -207,6 +209,76 @@ app.MapPost("/api/bots/{id}/test", async (string id, HttpRequest req) =>
     var llm = LlmClientFactory.Create(config, new HttpClient());
     var reply = await llm.CompleteAsync(history);
     return Results.Json(new { reply = reply.Text, flowMatch = (string?)null }, jsonOpts);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INTEGRAÇÕES (catálogo + aba Integrações de cada bot)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/integrations — catálogo e clientes que usam cada integração
+app.MapGet("/api/integrations", (BotIntegrationService integrations) =>
+    Results.Json(integrations.Usage().Select(u => new
+    {
+        u.Definition.Id,
+        u.Definition.Name,
+        u.Definition.Status,
+        u.Definition.AlwaysOn,
+        u.Definition.CostNote,
+        u.Tenants
+    }), jsonOpts));
+
+// GET /api/bots/{id}/integrations — estado efetivo de cada integração no bot
+app.MapGet("/api/bots/{id}/integrations", (string id, BotIntegrationService integrations) =>
+    integrations.Get(id) is { } view
+        ? Results.Json(new
+        {
+            view.TenantId,
+            view.Type,
+            view.MonthlyPriceBrl,
+            view.Warnings,
+            Integrations = view.Integrations.Select(i => new
+            {
+                i.Definition.Id,
+                i.Definition.Name,
+                i.Definition.Status,
+                i.Enabled,
+                i.BlockedReason,
+                i.Fields,
+                i.CompletedSteps
+            })
+        }, jsonOpts)
+        : Results.NotFound());
+
+// PUT /api/bots/{id}/integrations/{integrationId} — liga/desliga, campos e passos do cliente
+app.MapPut("/api/bots/{id}/integrations/{integrationId}", async (string id, string integrationId, IntegrationUpdate update, BotIntegrationService integrations, CancellationToken ct) =>
+{
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var outcome = await integrations.UpdateAsync(id, integrationId, update, ct);
+    return outcome.Ok
+        ? Results.Json(new { runtimeReloaded = outcome.RuntimeReloaded, runtimeError = outcome.RuntimeError }, jsonOpts)
+        : Results.BadRequest(new { error = outcome.Error });
+});
+
+// PUT /api/bots/{id}/price — preço mensal cobrado do cliente (margem no Financeiro)
+app.MapPut("/api/bots/{id}/price", async (string id, PriceUpdate body, BotIntegrationService integrations, CancellationToken ct) =>
+{
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var outcome = await integrations.SetPriceAsync(id, body.MonthlyPriceBrl, ct);
+    return outcome.Ok ? Results.NoContent() : Results.BadRequest(new { error = outcome.Error });
+});
+
+// POST /api/bots/{id}/integrations/{integrationId}/test — "Testar conexão" (roda no Runtime)
+app.MapPost("/api/bots/{id}/integrations/{integrationId}/test", async (string id, string integrationId, HttpRequest req, RuntimeApiClient runtime, CancellationToken ct) =>
+{
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    Dictionary<string, string>? fields = null;
+    if (req.ContentLength > 0)
+    {
+        using var doc = await JsonDocument.ParseAsync(req.Body, cancellationToken: ct);
+        if (doc.RootElement.TryGetProperty("fields", out var f) && f.ValueKind == JsonValueKind.Object)
+            fields = f.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? "");
+    }
+    return Results.Json(await runtime.TestIntegrationAsync(integrationId, id, fields, ct), jsonOpts);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

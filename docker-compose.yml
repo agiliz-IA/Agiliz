@@ -95,6 +95,9 @@ services:
       Wizard__AdminPassword: ${WIZARD_ADMIN_PASSWORD:-change-me}
       Runtime__ApiUrl: http://runtime:8080
       Runtime__AdminToken: ${RUNTIME_ADMIN_TOKEN:-}
+      # Financeiro em reais: câmbio e custo fixo por cliente/mês de cada integração ligada
+      Billing__UsdToBrl: ${BILLING_USD_TO_BRL:-}
+      Billing__FixedMonthlyBrl__whatsapp: ${BILLING_FIXED_WHATSAPP_BRL:-}
     restart: unless-stopped
     depends_on:
       - runtime

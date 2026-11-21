@@ -20,7 +20,7 @@ public sealed class CancelarAgendamentoTool(IServiceProvider services, GoogleCal
         if (ctx is null) return new ToolResult("Erro interno: contexto do usuario nao encontrado.");
 
         var tenant = registry.Get(ctx.TenantId);
-        var calendarId = tenant?.Config.GoogleCalendarId;
+        var calendarId = (tenant is null ? null : Agiliz.Core.Integrations.BotIntegrations.CalendarId(tenant.Config));
         if (tenant is null || string.IsNullOrWhiteSpace(calendarId))
             return new ToolResult("O calendario Google nao esta configurado para esta clinica.");
 

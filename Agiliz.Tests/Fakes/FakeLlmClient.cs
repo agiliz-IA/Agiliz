@@ -13,6 +13,12 @@ public sealed class FakeLlmClient : ILlmClient
     private Exception? _exceptionToThrow;
 
     public List<IReadOnlyList<ConversationMessage>> ReceivedHistories { get; } = [];
+
+    /// <summary>Nomes das ferramentas recebidas em cada chamada.</summary>
+    public List<IReadOnlyList<string>> ReceivedToolNames { get; } = [];
+
+    /// <summary>Custos de ferramenta devolvidos na próxima resposta (simula o loop de tools).</summary>
+    public List<ToolExecutionCost> NextToolCosts { get; } = [];
     public int CallCount => ReceivedHistories.Count;
 
     /// <summary>Enfileira respostas que serão retornadas em sequência.</summary>
@@ -32,6 +38,9 @@ public sealed class FakeLlmClient : ILlmClient
     public Task<LlmResponse> CompleteAsync(IReadOnlyList<ConversationMessage> history, IReadOnlyList<Agiliz.Core.Tools.ITool>? tools = null, CancellationToken ct = default)
     {
         ReceivedHistories.Add(history);
+        ReceivedToolNames.Add(tools?.Select(t => t.Name).ToList() ?? []);
+        var toolCosts = new List<ToolExecutionCost>(NextToolCosts);
+        NextToolCosts.Clear();
 
         if (_exceptionToThrow is not null)
         {
@@ -41,8 +50,8 @@ public sealed class FakeLlmClient : ILlmClient
         }
 
         if (_replies.TryDequeue(out var reply))
-            return Task.FromResult(new LlmResponse(reply, new TokenUsage(10, 20), new List<ToolExecutionCost>()));
+            return Task.FromResult(new LlmResponse(reply, new TokenUsage(10, 20), toolCosts));
 
-        return Task.FromResult(new LlmResponse("Resposta padrão do fake LLM.", new TokenUsage(10, 20), new List<ToolExecutionCost>()));
+        return Task.FromResult(new LlmResponse("Resposta padrão do fake LLM.", new TokenUsage(10, 20), toolCosts));
     }
 }

@@ -90,5 +90,41 @@ public sealed class RuntimeApiClient(IHttpClientFactory httpFactory, ILogger<Run
         }
     }
 
+    /// <summary>Botão "Testar conexão": o teste roda no Runtime, que tem as credenciais. Não lança exceção.</summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationTestResult> TestIntegrationAsync(
+        string integrationId, string tenantId, Dictionary<string, string>? fields, CancellationToken ct = default)
+    {
+        try
+        {
+            var request = new Agiliz.Core.Integrations.IntegrationTestRequest { TenantId = tenantId, Fields = fields };
+            using var response = await CreateClient().PostAsJsonAsync($"api/admin/integrations/{Uri.EscapeDataString(integrationId)}/test", request, JsonOpts, ct);
+            if (!response.IsSuccessStatusCode)
+                return new(false, $"O Runtime respondeu HTTP {(int)response.StatusCode}: {Shorten(await response.Content.ReadAsStringAsync(ct))}");
+            return await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationTestResult>(JsonOpts, ct)
+                   ?? new(false, "Resposta vazia do Runtime.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, $"Runtime inacessível: {ex.Message}");
+        }
+    }
+
+    /// <summary>Dados do servidor para a aba Integrações (ex.: e-mail da conta de serviço do Google). Null se o Runtime não responder.</summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationServerInfo?> GetIntegrationInfoAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await CreateClient().GetAsync("api/admin/integrations/info", ct);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationServerInfo>(JsonOpts, ct)
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            logger.LogWarning(ex, "Runtime inacessível para info de integrações");
+            return null;
+        }
+    }
+
     private static string Shorten(string text) => text.Length <= 200 ? text : text[..200] + "…";
 }

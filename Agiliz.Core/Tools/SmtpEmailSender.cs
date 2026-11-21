@@ -24,6 +24,10 @@ public sealed class SmtpEmailSender : IEmailSender
         _from = configuration["SMTP_FROM"] ?? _user;
     }
 
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(_host);
+
+    public string? FromAddress => string.IsNullOrWhiteSpace(_from) ? null : _from;
+
     public async Task SendEmailAsync(string to, string subject, string body, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_host))

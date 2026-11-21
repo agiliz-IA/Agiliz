@@ -75,5 +75,21 @@ public sealed class EvolutionClientTests : IDisposable
         media.MimeType.Should().StartWith("audio/ogg");
     }
 
+    [Theory]
+    [InlineData(200, """{ "instance": { "instanceName": "5521900000000", "state": "open" } }""", true, "conectado")]
+    [InlineData(200, """{ "instance": { "instanceName": "5521900000000", "state": "close" } }""", false, "QR code")]
+    [InlineData(404, """{ "error": "not found" }""", false, "não existe")]
+    [InlineData(401, "{}", false, "token")]
+    public async Task CheckConnectionAsync_TranslatesInstanceState(int status, string body, bool ok, string expected)
+    {
+        _server.Given(Request.Create().WithPath("/instance/connectionState/5521900000000").UsingGet())
+               .RespondWith(Response.Create().WithStatusCode(status).WithBody(body));
+
+        var result = await CreateClient().CheckConnectionAsync("5521900000000");
+
+        result.Ok.Should().Be(ok);
+        result.Message.Should().Contain(expected);
+    }
+
     public void Dispose() => _server.Stop();
 }

@@ -45,6 +45,7 @@
                 <div class="bot-card-actions">
                     <AgilizButton Variant="teal" Small="true" OnClick='() => NavManager.NavigateTo($"/test/{b.TenantId}")'>▶ Testar</AgilizButton>
                     <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo($"/edit/{b.TenantId}")'>Editar</AgilizButton>
+                    <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo($"/bots/{b.TenantId}/integrations")'>Integrações</AgilizButton>
                     <AgilizButton Variant="danger" Small="true" OnClick='() => DeleteBot(b.TenantId)'>Deletar</AgilizButton>
                 </div>
             </div>

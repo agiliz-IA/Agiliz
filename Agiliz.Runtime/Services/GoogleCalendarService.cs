@@ -28,6 +28,10 @@ public sealed class GoogleCalendarService
 
         try
         {
+            using (var key = System.Text.Json.JsonDocument.Parse(File.ReadAllText(keyPath)))
+                if (key.RootElement.TryGetProperty("client_email", out var email))
+                    ServiceAccountEmail = email.GetString();
+
             var credential = CredentialFactory
                 .FromFile<ServiceAccountCredential>(keyPath)
                 .ToGoogleCredential()
@@ -49,6 +53,38 @@ public sealed class GoogleCalendarService
     }
 
     public bool IsConfigured => _service is not null;
+
+    /// <summary>E-mail da conta de serviço: o cliente compartilha a agenda com ele.</summary>
+    public string? ServiceAccountEmail { get; }
+
+    /// <summary>
+    /// Lista um evento futuro: prova que a agenda existe e foi compartilhada. A permissão de edição
+    /// só aparece ao criar o primeiro evento (não criamos evento de teste na agenda do cliente).
+    /// </summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckAccessAsync(string calendarId, CancellationToken ct = default)
+    {
+        if (_service is null)
+            return new(false, "Credenciais do Google ausentes no servidor (configs/google_credentials.json).");
+
+        var account = ServiceAccountEmail ?? "a conta de serviço do Agiliz";
+        try
+        {
+            var request = _service.Events.List(calendarId);
+            request.MaxResults = 1;
+            request.SingleEvents = true;
+            request.TimeMinDateTimeOffset = DateTimeOffset.UtcNow;
+            await request.ExecuteAsync(ct);
+            return new(true, $"Agenda acessível por {account}. Confirme que o compartilhamento é \"Fazer alterações nos eventos\".");
+        }
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return new(false, $"Agenda não encontrada. Confira o ID e se ela foi compartilhada com {account}.");
+        }
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.Unauthorized)
+        {
+            return new(false, $"Sem permissão na agenda. Compartilhe com {account} (\"Fazer alterações nos eventos\").");
+        }
+    }
 
     public async Task<List<string>> GetAvailableSlotsAsync(
         string calendarId,

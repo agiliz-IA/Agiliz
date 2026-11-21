@@ -29,4 +29,8 @@ public interface IMessageProvider
     /// </summary>
     Task<Agiliz.Core.Media.MediaContent?> DownloadMediaAsync(string instance, string messageId, CancellationToken ct = default) =>
         Task.FromResult<Agiliz.Core.Media.MediaContent?>(null);
+
+    /// <summary>Confere se o número do bot está conectado (botão "Testar conexão").</summary>
+    Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default) =>
+        Task.FromResult(new Agiliz.Core.Integrations.IntegrationTestResult(false, "Este provedor de mensagens não tem teste de conexão."));
 }

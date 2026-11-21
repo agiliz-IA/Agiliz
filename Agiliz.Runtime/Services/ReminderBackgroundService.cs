@@ -74,6 +74,12 @@ public class ReminderBackgroundService : BackgroundService
                 continue;
             }
 
+            if (!Agiliz.Core.Integrations.BotIntegrations.IsEnabled(tenant.Config, Agiliz.Core.Integrations.IntegrationCatalog.Reminders))
+            {
+                _logger.LogDebug("Lembretes desligados para '{TenantId}'.", tenantId);
+                continue;
+            }
+
             var tenantPhones = group.Select(a => a.Phone).ToList();
             var users = await db.Users
                 .Where(u => u.TenantId == tenantId && tenantPhones.Contains(u.Phone))

@@ -88,6 +88,13 @@ Os custos (LLM, ferramentas, transcrição) ficam na tabela `CostRecords` do Pos
 ### Painel ↔ Runtime
 O painel chama o Runtime para ativar bots sem reiniciar (`POST /api/admin/reload`), ler o financeiro (`GET /api/admin/billing`) e operar o handoff. Essas rotas exigem o header `X-Admin-Token` com o valor de `RUNTIME_ADMIN_TOKEN` (no `.env`, usado pelos dois containers). Em `dotnet run` local (Development) e sem token, as rotas ficam abertas.
 
+### Integrações por cliente
+O catálogo fica em `Agiliz.Core/Integrations/IntegrationCatalog.cs` (Google Agenda, áudio, e-mail, transbordo, lembretes; WhatsApp oficial sob consulta; Pix e sistemas de clínica em breve). No painel:
+- **Integrações**: quem usa cada uma e quanto custou no mês.
+- **Bot → Integrações**: ligar/desligar, campos (ex.: ID da agenda), passos do cliente, "Testar conexão" e preço mensal cobrado.
+
+O agente só recebe as ferramentas das integrações ligadas. Bots criados antes do catálogo continuam como estavam até alguém salvar a aba. Cada custo é gravado com a integração que o gerou; o Financeiro mostra uso, custos fixos (`Billing:FixedMonthlyBrl:<id>`) e margem em R$ (`Billing:UsdToBrl`).
+
 ### 2. Rodando o Painel de Controle (Wizard)
 Siga os guias de configuração do seu primeiro Bot diretamente do seu navegador:
 ```bash

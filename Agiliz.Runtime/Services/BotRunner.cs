@@ -51,9 +51,9 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
 
         try
         {
-            var activeTools = tenant.Config.Type == BotType.Scheduling && tenant.Config.Llm.Provider == LlmProvider.Groq
-                ? tools.ToList()
-                : tools.Where(t => !SchedulingToolNames.Contains(t.Name)).ToList();
+            // Só as ferramentas das integrações ligadas para este cliente (painel → aba Integrações).
+            var allowedTools = Agiliz.Core.Integrations.BotIntegrations.AllowedToolNames(tenant.Config);
+            var activeTools = tools.Where(t => allowedTools.Contains(t.Name)).ToList();
 
             // Contexto dinâmico (data/hora local) vai como mensagem de sistema só para esta chamada:
             // sem ele o modelo não sabe o que é "amanhã" nem "sexta que vem".
@@ -81,10 +81,12 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
             
             sessions.AddCost(tenant.Config.TenantId, userPhone, totalOpCost);
 
-            RecordCost(tenant.Config.TenantId, CostType.TokensLLM, $"Inference {tenant.Config.Llm.Model} ({response.Usage.Total} tok)", tokenCostUsd);
+            RecordCost(tenant.Config.TenantId, CostType.TokensLLM, $"Inference {tenant.Config.Llm.Model} ({response.Usage.Total} tok)",
+                tokenCostUsd, Agiliz.Core.Integrations.IntegrationCatalog.Ai);
 
             foreach(var tc in response.ToolCosts)
-                RecordCost(tenant.Config.TenantId, CostType.ToolExecution, $"Tool: {tc.ToolName}", tc.Cost);
+                RecordCost(tenant.Config.TenantId, CostType.ToolExecution, $"Tool: {tc.ToolName}", tc.Cost,
+                    Agiliz.Core.Integrations.IntegrationCatalog.ForTool(tc.ToolName)?.Id);
 
             return reply;
         }
@@ -96,11 +98,11 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
     }
 
     /// <summary>Registra um custo do tenant no billing (LLM, tools, transcrição...). Só enfileira; não espera o banco.</summary>
-    public void RecordCost(string tenantId, CostType type, string description, decimal amountUsd)
+    public void RecordCost(string tenantId, CostType type, string description, decimal amountUsd, string? integrationId = null)
     {
         try
         {
-            costs.Record(new CostEntry { TenantId = tenantId, Type = type, Description = description, AmountUsd = amountUsd });
+            costs.Record(new CostEntry { TenantId = tenantId, Type = type, Description = description, AmountUsd = amountUsd, IntegrationId = integrationId });
         }
         catch (Exception ex)
         {
@@ -125,13 +127,4 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
                $"Use esta data como referência para \"hoje\", \"amanhã\" e dias da semana. " +
                $"Ao chamar ferramentas, envie datas em ISO 8601 com o fuso (ex.: {local:yyyy-MM-dd}T14:00:00{sign}{offset:hh\\:mm}).";
     }
-
-    private static readonly HashSet<string> SchedulingToolNames =
-    [
-        "verificar_agenda",
-        "marcar_agenda",
-        "confirmar_agendamento",
-        "cancelar_agendamento",
-        "reagendar_agendamento"
-    ];
 }

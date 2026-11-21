@@ -33,7 +33,7 @@ public sealed class MarcarAgendaTool(IServiceProvider services, GoogleCalendarSe
         if (ctx is null) return new ToolResult("Erro interno: contexto do usuario nao encontrado.");
 
         var tenant = registry.Get(ctx.TenantId);
-        var googleCalendarId = tenant?.Config.GoogleCalendarId;
+        var googleCalendarId = (tenant is null ? null : Agiliz.Core.Integrations.BotIntegrations.CalendarId(tenant.Config));
         if (tenant is null || string.IsNullOrWhiteSpace(googleCalendarId))
             return new ToolResult("O calendario Google nao esta configurado para esta clinica. Avise o paciente.");
 

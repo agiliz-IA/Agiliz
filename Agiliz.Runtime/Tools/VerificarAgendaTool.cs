@@ -31,7 +31,7 @@ public sealed class VerificarAgendaTool(GoogleCalendarService calendarService, T
         if (ctx == null) return new ToolResult("Erro interno: Contexto do usuário não encontrado.");
 
         var tenant = registry.Get(ctx.TenantId);
-        var googleCalendarId = tenant?.Config.GoogleCalendarId;
+        var googleCalendarId = (tenant is null ? null : Agiliz.Core.Integrations.BotIntegrations.CalendarId(tenant.Config));
 
         if (string.IsNullOrEmpty(googleCalendarId))
         {

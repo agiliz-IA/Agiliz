@@ -1,0 +1,258 @@
+@page "/bots/{TenantId}/integrations"
+@using Agiliz.Core.Integrations
+@using Agiliz.Wizard.Services
+@inject BotIntegrationService Integrations
+@inject RuntimeApiClient Runtime
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">integrações · @TenantId</div>
+        <div class="page-sub">Ligue o que este cliente contratou. A mudança vale na próxima mensagem dele.</div>
+    </div>
+    <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo("/")'>← Bots</AgilizButton>
+</div>
+
+<div class="wizard-content">
+    @if (_view is null)
+    {
+        <div class="form-card" style="color: var(--text-3);">Bot não encontrado.</div>
+    }
+    else
+    {
+        @foreach (var warning in _view.Warnings)
+        {
+            <div class="form-card" style="border-color: var(--yellow); color: var(--yellow); margin-bottom: 16px;">@warning</div>
+        }
+
+        <div class="form-card" style="margin-bottom: 20px; display: flex; align-items: end; gap: 12px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 220px;">
+                <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Preço mensal cobrado do cliente (R$)</div>
+                <input class="integration-input" type="number" min="0" step="0.01" placeholder="ex.: 197,00" @bind="_price" />
+                <div style="color: var(--text-3); font-size: 12px; margin-top: 4px;">Usado para a margem no Financeiro. Na fase 2 vem do plano.</div>
+            </div>
+            <AgilizButton Variant="primary" Small="true" OnClick="SavePriceAsync">Salvar preço</AgilizButton>
+        </div>
+
+        @foreach (var state in _view.Integrations.OrderBy(i => i.Definition.Status).ThenBy(i => i.Definition.AlwaysOn ? 0 : 1))
+        {
+            var def = state.Definition;
+            var draft = _drafts[def.Id];
+            var editable = def.Status == IntegrationStatus.Available;
+
+            <div class="form-card" style="margin-bottom: 16px; @(editable ? "" : "opacity: 0.7;")" @key="def.Id">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                    <div style="font-weight: 600; color: var(--text);">@def.Name</div>
+                    @if (def.AlwaysOn)
+                    {
+                        <AgilizBadge Text="sempre ligada" ColorType="claude" />
+                    }
+                    else if (def.Status == IntegrationStatus.OnRequest)
+                    {
+                        <AgilizBadge Text="sob consulta" ColorType="groq" />
+                    }
+                    else if (def.Status == IntegrationStatus.ComingSoon)
+                    {
+                        <AgilizBadge Text="em breve" ColorType="groq" />
+                    }
+                    else if (state.Enabled)
+                    {
+                        <AgilizBadge Text="ligada" ColorType="flow" />
+                    }
+                    else
+                    {
+                        <span style="font-size: 11px; font-family: var(--mono); color: var(--text-3);">desligada</span>
+                    }
+                </div>
+                <div style="color: var(--text-2); font-size: 13px; margin-top: 6px;">@def.Description</div>
+                <div style="color: var(--text-3); font-size: 12px; margin-top: 4px;">Custo: @def.CostNote</div>
+
+                @if (state.BlockedReason is not null && editable)
+                {
+                    <div style="color: var(--yellow); font-size: 12px; margin-top: 8px;">@state.BlockedReason</div>
+                }
+
+                @if (editable && def.Fields.Count > 0)
+                {
+                    <div style="margin-top: 14px; display: grid; gap: 10px;">
+                        @foreach (var field in def.Fields)
+                        {
+                            <label style="display: grid; gap: 4px;">
+                                <span style="color: var(--text-2); font-size: 13px;">@field.Label@(field.Required ? " *" : "")</span>
+                                <input class="integration-input" placeholder="@field.Placeholder"
+                                       value="@draft.Fields.GetValueOrDefault(field.Key)"
+                                       @onchange="e => draft.Fields[field.Key] = e.Value?.ToString() ?? string.Empty" />
+                                @if (field.Help is not null)
+                                {
+                                    <span style="color: var(--text-3); font-size: 12px;">@field.Help</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                }
+
+                @if (def.ClientSteps.Count > 0)
+                {
+                    <div style="margin-top: 14px;">
+                        <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Passos do cliente</div>
+                        @foreach (var step in def.ClientSteps)
+                        {
+                            <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); margin-bottom: 4px;">
+                                <input type="checkbox" disabled="@(!editable)" checked="@draft.Steps.Contains(step.Id)"
+                                       @onchange="e => ToggleStep(draft, step.Id, e.Value is true)" />
+                                <span>@step.Text</span>
+                            </label>
+                        }
+                        @if (def.Id == IntegrationCatalog.GoogleCalendar && _info?.GoogleServiceAccountEmail is { } account)
+                        {
+                            <div style="font-size: 12px; color: var(--text-3); margin-top: 4px;">
+                                Conta de serviço: <span style="font-family: var(--mono); color: var(--text);">@account</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (editable)
+                {
+                    <div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
+                        @if (!def.AlwaysOn)
+                        {
+                            <AgilizButton Variant="@(state.Enabled ? "danger" : "teal")" Small="true" Disabled="@(draft.Busy || (!state.Enabled && state.BlockedReason is not null))"
+                                          OnClick="() => ToggleAsync(def.Id, !state.Enabled)">
+                                @(state.Enabled ? "Desligar" : "Ligar")
+                            </AgilizButton>
+                        }
+                        @if (def.Fields.Count > 0 || def.ClientSteps.Count > 0)
+                        {
+                            <AgilizButton Variant="ghost" Small="true" Disabled="draft.Busy" OnClick="() => SaveAsync(def.Id, state.Enabled)">Salvar</AgilizButton>
+                        }
+                        @if (def.Testable)
+                        {
+                            <AgilizButton Variant="ghost" Small="true" Disabled="draft.Busy" OnClick="() => TestAsync(def.Id)">Testar conexão</AgilizButton>
+                        }
+                    </div>
+                    @if (draft.TestMessage is not null)
+                    {
+                        <div style="margin-top: 10px; font-size: 13px; color: @(draft.TestOk ? "var(--teal)" : "var(--red)");">
+                            @(draft.TestOk ? "✓" : "✗") @draft.TestMessage
+                        </div>
+                    }
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .integration-input {
+        width: 100%;
+        background: var(--surface-2);
+        border: 1px solid var(--border-2);
+        border-radius: var(--radius);
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+</style>
+
+@code {
+    [Parameter] public string TenantId { get; set; } = "";
+
+    private BotIntegrationsView? _view;
+    private IntegrationServerInfo? _info;
+    private decimal? _price;
+    private readonly Dictionary<string, Draft> _drafts = new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed class Draft
+    {
+        public Dictionary<string, string> Fields { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Steps { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public string? TestMessage { get; set; }
+        public bool TestOk { get; set; }
+        public bool Busy { get; set; }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Load();
+        _info = await Runtime.GetIntegrationInfoAsync();
+    }
+
+    private void Load()
+    {
+        _view = Integrations.Get(TenantId);
+        if (_view is null) return;
+        _price = _view.MonthlyPriceBrl;
+
+        foreach (var state in _view.Integrations)
+        {
+            var draft = _drafts.TryGetValue(state.Definition.Id, out var existing) ? existing : _drafts[state.Definition.Id] = new Draft();
+            draft.Fields.Clear();
+            foreach (var (key, value) in state.Fields) draft.Fields[key] = value;
+            draft.Steps.Clear();
+            draft.Steps.UnionWith(state.CompletedSteps);
+        }
+    }
+
+    private static void ToggleStep(Draft draft, string stepId, bool done)
+    {
+        if (done) draft.Steps.Add(stepId); else draft.Steps.Remove(stepId);
+    }
+
+    private Task ToggleAsync(string integrationId, bool enable) => SaveAsync(integrationId, enable);
+
+    private async Task SaveAsync(string integrationId, bool enabled)
+    {
+        var draft = _drafts[integrationId];
+        draft.Busy = true;
+        try
+        {
+            var outcome = await Integrations.UpdateAsync(TenantId, integrationId, new IntegrationUpdate
+            {
+                Enabled = enabled,
+                Fields = new Dictionary<string, string>(draft.Fields),
+                CompletedSteps = draft.Steps.ToList()
+            });
+
+            if (!outcome.Ok)
+                await JS.InvokeVoidAsync("toast", outcome.Error, "error");
+            else if (!outcome.RuntimeReloaded)
+                await JS.InvokeVoidAsync("toast", $"Salvo, mas o Runtime não recarregou: {outcome.RuntimeError}", "error");
+            else
+                await JS.InvokeVoidAsync("toast", "Salvo e ativo no Runtime.", "success");
+
+            Load();
+        }
+        finally
+        {
+            draft.Busy = false;
+        }
+    }
+
+    private async Task TestAsync(string integrationId)
+    {
+        var draft = _drafts[integrationId];
+        draft.Busy = true;
+        draft.TestMessage = "testando...";
+        draft.TestOk = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Runtime.TestIntegrationAsync(integrationId, TenantId, new Dictionary<string, string>(draft.Fields));
+            draft.TestOk = result.Ok;
+            draft.TestMessage = result.Message;
+        }
+        finally
+        {
+            draft.Busy = false;
+        }
+    }
+
+    private async Task SavePriceAsync()
+    {
+        var outcome = await Integrations.SetPriceAsync(TenantId, _price);
+        await JS.InvokeVoidAsync("toast", outcome.Ok ? "Preço salvo." : outcome.Error, outcome.Ok ? "success" : "error");
+        Load();
+    }
+}

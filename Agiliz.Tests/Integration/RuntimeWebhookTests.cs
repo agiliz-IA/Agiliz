@@ -230,6 +230,30 @@ public sealed class RuntimeWebhookTests : IDisposable
         _costs.Entries.Should().Contain(e => e.TenantId == "test-bot" && e.Type == CostType.TokensLLM);
     }
 
+    [Fact]
+    public async Task Webhook_AudioWhenIntegrationIsOff_AsksClientToType()
+    {
+        var transcriber = new FakeTranscriber("não deveria transcrever");
+        using var factory = BuildFactory().WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton<Agiliz.Core.Media.IAudioTranscriber>(transcriber)));
+        // Sobrescreve o bot antes do host subir: transcrição desligada na aba Integrações.
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "test-bot", whatsappNumber: "15005550006") with
+        {
+            Integrations = new() { [Agiliz.Core.Integrations.IntegrationCatalog.Audio] = new IntegrationSettings { Enabled = false } }
+        });
+
+        var payload = V2Payload("15005550006", "5521988887777@s.whatsapp.net", new
+        {
+            audioMessage = new { mimetype = "audio/ogg; codecs=opus", seconds = 4, ptt = true },
+            base64 = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+        });
+        await factory.CreateClient().PostAsync("/webhook", payload);
+
+        transcriber.Calls.Should().Be(0);
+        _fakeLlm.ReceivedHistories.Single().Should().Contain(m => m.Role == MessageRole.User && m.Content.Contains("escrever"));
+        _costs.Entries.Should().NotContain(e => e.IntegrationId == Agiliz.Core.Integrations.IntegrationCatalog.Audio);
+    }
+
     private sealed class FakeTranscriber(string text) : Agiliz.Core.Media.IAudioTranscriber
     {
         public int Calls { get; private set; }

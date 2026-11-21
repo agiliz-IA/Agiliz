@@ -60,6 +60,7 @@ builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.CancelarAgendamentoToo
 builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.ReagendarAgendamentoTool>();
 builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.PausarBotTool>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
+builder.Services.AddSingleton<IntegrationTester>();
 
 // ─── Build ────────────────────────────────────────────────────────────────────
 var app = builder.Build();

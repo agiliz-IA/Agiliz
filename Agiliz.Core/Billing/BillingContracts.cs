@@ -20,6 +20,9 @@ public sealed record BillingReport
     public int EntryCount { get; init; }
     public IReadOnlyList<TenantCostSummary> Tenants { get; init; } = [];
 
+    /// <summary>Total do período por integração, somando todos os clientes.</summary>
+    public IReadOnlyList<IntegrationCostSummary> Integrations { get; init; } = [];
+
     /// <summary>Lançamentos mais recentes do período (limitado por <c>limit</c>); os totais cobrem o período inteiro.</summary>
     public IReadOnlyList<CostEntry> Entries { get; init; } = [];
 }
@@ -32,4 +35,17 @@ public sealed record TenantCostSummary
     public decimal ToolsUsd { get; init; }
     public decimal OtherUsd { get; init; }
     public int Count { get; init; }
+
+    /// <summary>Custo do cliente por integração (id null = lançamento sem integração).</summary>
+    public IReadOnlyList<IntegrationCostSummary> ByIntegration { get; init; } = [];
+}
+
+public sealed record IntegrationCostSummary
+{
+    public string? IntegrationId { get; init; }
+    public decimal TotalUsd { get; init; }
+    public int Count { get; init; }
+
+    /// <summary>Clientes com custo nesta integração (só no total geral).</summary>
+    public int TenantCount { get; init; }
 }

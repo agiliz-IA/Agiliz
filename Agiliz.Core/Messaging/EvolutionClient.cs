@@ -102,6 +102,48 @@ public sealed class EvolutionClient : IMessageProvider
         return new MediaContent(Convert.FromBase64String(media.Base64), media.Mimetype ?? "audio/ogg");
     }
 
+    /// <summary>GET /instance/connectionState/{instance} → "open", "connecting" ou "close".</summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync($"{_apiUrl}/instance/connectionState/{Uri.EscapeDataString(instance)}", ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new(false, $"Evolution fora do ar ou Evolution:ApiUrl errado ({_apiUrl}): {ex.Message}");
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return new(false, $"A instância \"{instance}\" não existe na Evolution. Crie com o nome igual ao número do bot.");
+            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                return new(false, "A Evolution recusou o token (Evolution:ApiToken).");
+            if (!response.IsSuccessStatusCode)
+                return new(false, $"A Evolution respondeu HTTP {(int)response.StatusCode}.");
+
+            string? state = null;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+                var root = doc.RootElement;
+                if (root.TryGetProperty("instance", out var inst) && inst.TryGetProperty("state", out var s1)) state = s1.GetString();
+                else if (root.TryGetProperty("state", out var s2)) state = s2.GetString();
+            }
+            catch (System.Text.Json.JsonException) { }
+
+            return state switch
+            {
+                "open" => new(true, $"WhatsApp conectado na instância \"{instance}\"."),
+                "connecting" => new(false, "A instância está esperando a leitura do QR code."),
+                "close" => new(false, "WhatsApp desconectado: escaneie o QR code de novo na Evolution."),
+                _ => new(false, $"Estado desconhecido da instância: {state ?? "sem resposta"}.")
+            };
+        }
+    }
+
     public string NormalizeNumber(string number)
     {
         // Remove prefixos comuns (whatsapp:, etc) e símbolos

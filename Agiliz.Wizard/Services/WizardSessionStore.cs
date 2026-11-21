@@ -152,7 +152,7 @@ public sealed class WizardSessionStore
         session.History.Add(ConversationMessage.Assistant(reply));
 
         var tokenCostUsd = ModelCatalog.EstimateCostUsd(ModelCatalog.DefaultGroqModel, response.Usage);
-        await _runtime.RecordCostAsync(new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd }, ct);
+        await _runtime.RecordCostAsync(new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd, IntegrationId = Agiliz.Core.Integrations.IntegrationCatalog.Ai }, ct);
 
         var configReady = reply.Contains("===JSON_START===") && reply.Contains("===JSON_END===");
         string? jsonConfig = null;

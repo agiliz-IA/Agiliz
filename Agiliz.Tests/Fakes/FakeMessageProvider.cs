@@ -12,6 +12,17 @@ public sealed class FakeMessageProvider : IMessageProvider
 
     public List<SentMessage> Sent { get; } = [];
 
+    /// <summary>Resposta do teste de conexão do WhatsApp.</summary>
+    public Agiliz.Core.Integrations.IntegrationTestResult ConnectionResult { get; set; } = new(true, "WhatsApp conectado (fake).");
+
+    public List<string> ConnectionChecks { get; } = [];
+
+    public Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default)
+    {
+        ConnectionChecks.Add(instance);
+        return Task.FromResult(ConnectionResult);
+    }
+
     public Task SendAsync(string toNumber, string fromNumber, string body, CancellationToken ct = default)
     {
         Sent.Add(new SentMessage(NormalizeNumber(toNumber), NormalizeNumber(fromNumber), body));

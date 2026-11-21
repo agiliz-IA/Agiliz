@@ -45,6 +45,59 @@ public sealed class BotRunnerTests
         _costs.Entries.Should().BeEmpty();
     }
 
+    // ─── Integrações → ferramentas e custo ────────────────────────────────────
+
+    private sealed class NamedTool(string name) : Agiliz.Core.Tools.ITool
+    {
+        public string Name => name;
+        public string Description => name;
+        public System.Text.Json.Nodes.JsonObject ParametersSchema => new() { ["type"] = "object" };
+        public Task<ToolResult> ExecuteAsync(string arguments, CancellationToken ct = default) => Task.FromResult(new ToolResult("ok"));
+    }
+
+    private BotRunner RunnerWithTools(params string[] toolNames) =>
+        new(_sessions, NullLogger<BotRunner>.Instance, toolNames.Select(n => (Agiliz.Core.Tools.ITool)new NamedTool(n)).ToArray(), _costs);
+
+    [Fact]
+    public async Task ProcessAsync_SendsOnlyToolsOfEnabledIntegrations()
+    {
+        var runner = RunnerWithTools("send_email", "chamar_atendente", "verificar_agenda");
+        var config = TestFixtures.DefaultConfig() with
+        {
+            Integrations = new()
+            {
+                [Agiliz.Core.Integrations.IntegrationCatalog.Email] = new IntegrationSettings { Enabled = false },
+                [Agiliz.Core.Integrations.IntegrationCatalog.Handoff] = new IntegrationSettings { Enabled = true }
+            }
+        };
+
+        await runner.ProcessAsync(Tenant(config), "+5521999", "bom dia");
+
+        _llm.ReceivedToolNames.Should().ContainSingle().Which.Should().Equal("chamar_atendente");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SchedulingBotWithCalendar_GetsCalendarTools()
+    {
+        var runner = RunnerWithTools("send_email", "verificar_agenda", "marcar_agenda");
+        var config = TestFixtures.DefaultConfig() with { Type = BotType.Scheduling };
+
+        await runner.ProcessAsync(Tenant(config), "+5521999", "quero marcar");
+
+        _llm.ReceivedToolNames.Single().Should().Contain(["verificar_agenda", "marcar_agenda"]);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AttributesCostsToIntegrations()
+    {
+        _llm.NextToolCosts.Add(new ToolExecutionCost("send_email", 0.02m));
+
+        await _runner.ProcessAsync(Tenant(TestFixtures.DefaultConfig()), "+5521999", "me manda por e-mail");
+
+        _costs.Entries.Should().Contain(e => e.Type == CostType.TokensLLM && e.IntegrationId == Agiliz.Core.Integrations.IntegrationCatalog.Ai);
+        _costs.Entries.Should().Contain(e => e.Type == CostType.ToolExecution && e.IntegrationId == Agiliz.Core.Integrations.IntegrationCatalog.Email && e.AmountUsd == 0.02m);
+    }
+
     private TenantEntry Tenant(BotConfig config) => new(config, _llm);
 
     // ─── Flow matching ────────────────────────────────────────────────────────

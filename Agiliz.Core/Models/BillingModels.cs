@@ -26,4 +26,7 @@ public record CostEntry
     public required CostType Type { get; init; }
     public required string Description { get; init; }
     public required decimal AmountUsd { get; init; }
+
+    /// <summary>Integração do catálogo que gerou o custo (ia, audio, email...). Null = não atribuído.</summary>
+    public string? IntegrationId { get; init; }
 }

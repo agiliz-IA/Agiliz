@@ -14,6 +14,9 @@ public class CostRecord
     public string Description { get; set; } = "";
     public decimal AmountUsd { get; set; }
 
+    /// <summary>Integração do catálogo que gerou o custo (ia, audio, email...).</summary>
+    public string? IntegrationId { get; set; }
+
     public static CostRecord From(CostEntry entry) => new()
     {
         Id = entry.Id,
@@ -23,7 +26,8 @@ public class CostRecord
         Description = entry.Description.Length <= DescriptionMaxLength
             ? entry.Description
             : entry.Description[..DescriptionMaxLength],
-        AmountUsd = entry.AmountUsd
+        AmountUsd = entry.AmountUsd,
+        IntegrationId = string.IsNullOrWhiteSpace(entry.IntegrationId) ? null : entry.IntegrationId
     };
 
     public CostEntry ToEntry() => new()
@@ -33,6 +37,7 @@ public class CostRecord
         TenantId = TenantId,
         Type = Type,
         Description = Description,
-        AmountUsd = AmountUsd
+        AmountUsd = AmountUsd,
+        IntegrationId = IntegrationId
     };
 }

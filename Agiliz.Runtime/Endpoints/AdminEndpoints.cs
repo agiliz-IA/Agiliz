@@ -24,6 +24,31 @@ public static class AdminEndpoints
 
         admin.MapGet("/billing", GetBillingAsync);
         admin.MapPost("/billing", RecordCost).DisableAntiforgery();
+
+        // Botão "Testar conexão" do painel e dados que o painel mostra (ex.: e-mail para compartilhar a agenda).
+        admin.MapGet("/integrations/info", (IntegrationTester tester) => Results.Ok(tester.Info()));
+        admin.MapPost("/integrations/{integrationId}/test", TestIntegrationAsync).DisableAntiforgery();
+    }
+
+    private static async Task<IResult> TestIntegrationAsync(
+        string integrationId,
+        Agiliz.Core.Integrations.IntegrationTestRequest request,
+        TenantRegistry registry,
+        IntegrationTester tester,
+        IConfiguration configuration,
+        CancellationToken ct)
+    {
+        // Bot recém-salvo ainda pode não ter sido recarregado: cai para o arquivo.
+        var config = registry.Get(request.TenantId)?.Config;
+        if (config is null)
+        {
+            var configsDir = BotConfigLoader.ResolveConfigsDir(configuration);
+            if (!BotConfigLoader.Exists(configsDir, request.TenantId))
+                return Results.NotFound(new { error = "Bot não encontrado." });
+            config = BotConfigLoader.Load(configsDir, request.TenantId);
+        }
+
+        return Results.Ok(await tester.TestAsync(integrationId, config, request.Fields, ct));
     }
 
     /// <summary>Totais por cliente do período inteiro + os lançamentos mais recentes (até <paramref name="limit"/>).</summary>
@@ -47,7 +72,11 @@ public static class AdminEndpoints
                 LlmUsd = t.Where(x => x.Type == CostType.TokensLLM).Sum(x => x.Total),
                 ToolsUsd = t.Where(x => x.Type == CostType.ToolExecution).Sum(x => x.Total),
                 OtherUsd = t.Where(x => x.Type is not (CostType.TokensLLM or CostType.ToolExecution)).Sum(x => x.Total),
-                Count = t.Sum(x => x.Count)
+                Count = t.Sum(x => x.Count),
+                ByIntegration = t.GroupBy(x => x.IntegrationId)
+                    .Select(i => new IntegrationCostSummary { IntegrationId = i.Key, TotalUsd = i.Sum(x => x.Total), Count = i.Sum(x => x.Count) })
+                    .OrderByDescending(i => i.TotalUsd)
+                    .ToList()
             })
             .OrderByDescending(t => t.TotalUsd)
             .ToList();
@@ -64,6 +93,16 @@ public static class AdminEndpoints
             TotalUsd = tenants.Sum(t => t.TotalUsd),
             EntryCount = tenants.Sum(t => t.Count),
             Tenants = tenants,
+            Integrations = totals.GroupBy(t => t.IntegrationId)
+                .Select(i => new IntegrationCostSummary
+                {
+                    IntegrationId = i.Key,
+                    TotalUsd = i.Sum(x => x.Total),
+                    Count = i.Sum(x => x.Count),
+                    TenantCount = i.Select(x => x.TenantId).Distinct().Count()
+                })
+                .OrderByDescending(i => i.TotalUsd)
+                .ToList(),
             Entries = entries.Select(e => e.ToEntry()).ToList()
         });
     }
@@ -85,10 +124,10 @@ public static class AdminEndpoints
         return query;
     }
 
-    /// <summary>Soma no banco (GROUP BY tenant, tipo); o resto da agregação é em memória.</summary>
+    /// <summary>Soma no banco (GROUP BY tenant, tipo, integração); o resto da agregação é em memória.</summary>
     public static IQueryable<CostTotal> TotalsByTenantAndType(IQueryable<CostRecord> query) =>
-        query.GroupBy(c => new { c.TenantId, c.Type })
-             .Select(g => new CostTotal(g.Key.TenantId, g.Key.Type, g.Sum(c => c.AmountUsd), g.Count()));
+        query.GroupBy(c => new { c.TenantId, c.Type, c.IntegrationId })
+             .Select(g => new CostTotal(g.Key.TenantId, g.Key.Type, g.Key.IntegrationId, g.Sum(c => c.AmountUsd), g.Count()));
 
     /// <summary>Custos gerados fora do Runtime (ex.: meta-agente do painel). Id e horário são definidos aqui.</summary>
     private static IResult RecordCost(CostEntry entry, ICostRecorder costs)
@@ -99,13 +138,15 @@ public static class AdminEndpoints
             return Results.BadRequest(new { error = "description obrigatória." });
         if (entry.AmountUsd is < 0 or > 1000)
             return Results.BadRequest(new { error = "amountUsd fora do intervalo esperado (0 a 1000)." });
+        if (entry.IntegrationId is not null && Agiliz.Core.Integrations.IntegrationCatalog.Find(entry.IntegrationId) is null)
+            return Results.BadRequest(new { error = "integrationId fora do catálogo." });
 
         costs.Record(entry with { Id = Guid.NewGuid(), Timestamp = DateTimeOffset.UtcNow });
         return Results.Accepted();
     }
 }
 
-public sealed record CostTotal(string TenantId, CostType Type, decimal Total, int Count);
+public sealed record CostTotal(string TenantId, CostType Type, string? IntegrationId, decimal Total, int Count);
 
 /// <summary>
 /// Exige <c>Runtime:AdminToken</c> no header <see cref="HeaderName"/>. Sem token configurado, as rotas

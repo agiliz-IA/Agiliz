@@ -206,6 +206,86 @@ public sealed class RuntimeAdminTests : IDisposable
         report.Entries.Should().ContainSingle(e => e.Description == "recente");
     }
 
+    // ─── Custo por integração (I6) ────────────────────────────────────────────
+
+    [Fact]
+    public async Task Billing_GroupsCostsByIntegration()
+    {
+        using var factory = BuildFactory();
+        var client = Client(factory);
+
+        await client.PostAsJsonAsync("/api/admin/billing", new { tenantId = "clinica", type = "ToolExecution", description = "Transcrição", amountUsd = 0.01m, integrationId = "audio" });
+        await client.PostAsJsonAsync("/api/admin/billing", new { tenantId = "clinica", type = "TokensLLM", description = "LLM", amountUsd = 0.03m, integrationId = "ia" });
+        await client.PostAsJsonAsync("/api/admin/billing", new { tenantId = "outra", type = "TokensLLM", description = "LLM", amountUsd = 0.02m, integrationId = "ia" });
+
+        var report = await WaitForBillingAsync(client, r => r.EntryCount >= 3);
+
+        report.Integrations.Should().ContainSingle(i => i.IntegrationId == "ia" && i.TotalUsd == 0.05m && i.TenantCount == 2);
+        report.Tenants.Single(t => t.TenantId == "clinica").ByIntegration
+            .Should().ContainSingle(i => i.IntegrationId == "audio" && i.TotalUsd == 0.01m);
+        report.Entries.Should().Contain(e => e.IntegrationId == "audio");
+    }
+
+    [Fact]
+    public async Task Billing_PostWithUnknownIntegration_Returns400()
+    {
+        using var factory = BuildFactory();
+        var post = await Client(factory).PostAsJsonAsync("/api/admin/billing",
+            new { tenantId = "clinica", type = "TokensLLM", description = "x", amountUsd = 0.01m, integrationId = "inventada" });
+        post.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ─── Testar conexão (I5) ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TestIntegration_WhatsApp_ChecksBotInstance()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "clinica", whatsappNumber: "5521900000003"));
+        _provider.ConnectionResult = new Agiliz.Core.Integrations.IntegrationTestResult(false, "WhatsApp desconectado: escaneie o QR code.");
+        using var factory = BuildFactory();
+
+        var response = await Client(factory).PostAsJsonAsync("/api/admin/integrations/whatsapp/test", new { tenantId = "clinica" });
+
+        var result = (await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationTestResult>(JsonOpts))!;
+        result.Ok.Should().BeFalse();
+        result.Message.Should().Contain("QR code");
+        _provider.ConnectionChecks.Should().Equal("5521900000003");
+    }
+
+    [Fact]
+    public async Task TestIntegration_GoogleWithoutCredentials_ExplainsInPortuguese()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "clinica", whatsappNumber: "5521900000004") with { Type = BotType.Scheduling });
+        using var factory = BuildFactory();
+
+        var response = await Client(factory).PostAsJsonAsync("/api/admin/integrations/google-agenda/test",
+            new { tenantId = "clinica", fields = new Dictionary<string, string> { ["calendarId"] = "agenda@gmail.com" } });
+
+        var result = (await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationTestResult>(JsonOpts))!;
+        result.Ok.Should().BeFalse();
+        result.Message.Should().Contain("Credenciais do Google");
+    }
+
+    [Fact]
+    public async Task TestIntegration_GoogleWithoutCalendarId_AsksForIt()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "clinica", whatsappNumber: "5521900000005") with { Type = BotType.Scheduling });
+        using var factory = BuildFactory();
+
+        var response = await Client(factory).PostAsJsonAsync("/api/admin/integrations/google-agenda/test", new { tenantId = "clinica" });
+
+        (await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationTestResult>(JsonOpts))!
+            .Message.Should().Contain("ID da agenda");
+    }
+
+    [Fact]
+    public async Task TestIntegration_UnknownBot_Returns404()
+    {
+        using var factory = BuildFactory();
+        var response = await Client(factory).PostAsJsonAsync("/api/admin/integrations/whatsapp/test", new { tenantId = "nao-existe" });
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     public void Dispose()
     {
         _dir.Dispose();

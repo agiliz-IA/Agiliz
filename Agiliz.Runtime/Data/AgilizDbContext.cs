@@ -37,6 +37,7 @@ public class AgilizDbContext : DbContext
             cost.Property(c => c.Type).HasConversion<string>().HasMaxLength(32);
             cost.Property(c => c.Description).HasMaxLength(CostRecord.DescriptionMaxLength).IsRequired();
             cost.Property(c => c.AmountUsd).HasPrecision(18, 8);
+            cost.Property(c => c.IntegrationId).HasMaxLength(64);
             cost.HasIndex(c => new { c.TenantId, c.Timestamp });
             cost.HasIndex(c => c.Timestamp);
         });

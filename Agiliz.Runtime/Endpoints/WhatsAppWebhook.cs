@@ -184,7 +184,8 @@ public static class WhatsAppWebhook
     {
         const string NotTranscribed = "[O cliente enviou um áudio que não pôde ser ouvido. Peça gentilmente para ele escrever a mensagem.]";
 
-        if (!transcriber.IsEnabled)
+        // Desligado no servidor (Audio:TranscriptionEnabled) ou na aba Integrações do bot.
+        if (!transcriber.IsEnabled || !Agiliz.Core.Integrations.BotIntegrations.IsEnabled(tenant.Config, Agiliz.Core.Integrations.IntegrationCatalog.Audio))
             return NotTranscribed;
 
         try
@@ -206,7 +207,7 @@ public static class WhatsAppWebhook
 
             var seconds = message.AudioMessage?.Seconds ?? 30;
             runner.RecordCost(tenant.Config.TenantId, CostType.ToolExecution, $"Transcrição de áudio ({seconds}s)",
-                Agiliz.Core.LLM.ModelCatalog.EstimateTranscriptionCostUsd(seconds));
+                Agiliz.Core.LLM.ModelCatalog.EstimateTranscriptionCostUsd(seconds), Agiliz.Core.Integrations.IntegrationCatalog.Audio);
 
             logger.LogInformation("[{Tenant}] Áudio de {Seconds}s transcrito", tenant.Config.TenantId, seconds);
             return $"[Áudio transcrito] {text}";
