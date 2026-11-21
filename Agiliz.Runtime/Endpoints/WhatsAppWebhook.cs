@@ -16,7 +16,10 @@ public static class WhatsAppWebhook
         app.MapPost("/webhook", HandleAsync)
            .DisableAntiforgery();
 
-        app.MapGet("/api/handoff/paused", async (AgilizDbContext db, CancellationToken ct) =>
+        // Rotas usadas pelo painel: mesmo token das rotas /api/admin (podem enviar mensagem em nome do cliente).
+        var handoff = app.MapGroup("").AddEndpointFilter<AdminTokenFilter>();
+
+        handoff.MapGet("/api/handoff/paused", async (AgilizDbContext db, CancellationToken ct) =>
         {
             var rows = await db.ConversationStates
                 .Where(s => s.IsPaused)
@@ -27,13 +30,13 @@ public static class WhatsAppWebhook
             return Results.Ok(rows);
         });
 
-        app.MapPost("/api/handoff/{tenantId}/{phone}/resume", (string tenantId, string phone, SessionStore sessions) =>
+        handoff.MapPost("/api/handoff/{tenantId}/{phone}/resume", (string tenantId, string phone, SessionStore sessions) =>
         {
             sessions.ResumeSession(tenantId, phone);
             return Results.Ok(new { message = $"Sessao retomada para {tenantId}/{phone}" });
         });
 
-        app.MapPost("/api/handoff/{tenantId}/{phone}/message", async (
+        handoff.MapPost("/api/handoff/{tenantId}/{phone}/message", async (
             string tenantId,
             string phone,
             HumanMessageRequest request,
@@ -49,7 +52,7 @@ public static class WhatsAppWebhook
             return Results.Ok();
         });
 
-        app.MapPost("/api/unpause/{tenantId}/{phone}", (string tenantId, string phone, SessionStore sessions) =>
+        handoff.MapPost("/api/unpause/{tenantId}/{phone}", (string tenantId, string phone, SessionStore sessions) =>
         {
             sessions.ResumeSession(tenantId, phone);
             return Results.Ok(new { message = $"Sessao retomada para {tenantId}/{phone}" });

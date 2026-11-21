@@ -6,13 +6,12 @@ using Agiliz.Wizard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var configsDir = builder.Configuration["ConfigsDir"]
-    ?? "";
-if (string.IsNullOrWhiteSpace(configsDir))
-    configsDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+var configsDir = BotConfigLoader.ResolveConfigsDir(builder.Configuration);
+var movedBots = BotConfigLoader.MigrateLegacyLayout(configsDir);
 
 builder.Services.AddSingleton<WizardSessionStore>();
 builder.Services.AddHttpClient();
+RuntimeApiClient.Register(builder.Services);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 builder.Services.AddServerSideBlazor()
@@ -23,6 +22,9 @@ builder.Services.AddRazorComponents()
 builder.Services.AddAntiforgery();
 
 var app = builder.Build();
+
+if (movedBots.Count > 0)
+    app.Logger.LogInformation("Bots movidos para configs/bots/: {Bots}", string.Join(", ", movedBots));
 
 if (app.Environment.IsDevelopment())
     app.UseCors();
@@ -97,33 +99,30 @@ app.MapGet("/api/bots", () =>
 // GET /api/bots/{id} — retorna config completo (para edit)
 app.MapGet("/api/bots/{id}", (string id) =>
 {
-    try
-    {
-        var config = BotConfigLoader.Load(configsDir, id);
-        return Results.Json(config, jsonOpts);
-    }
-    catch (FileNotFoundException)
-    {
-        return Results.NotFound();
-    }
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var config = BotConfigLoader.Load(configsDir, id);
+    return Results.Json(config, jsonOpts);
 });
 
-// DELETE /api/bots/{id}
-app.MapDelete("/api/bots/{id}", (string id) =>
+// DELETE /api/bots/{id} — apaga o config e avisa o Runtime para parar de atender o número
+app.MapDelete("/api/bots/{id}", async (string id, RuntimeApiClient runtime) =>
 {
-    var path = Path.Combine(configsDir, $"{id}.json");
-    if (!File.Exists(path)) return Results.NotFound();
-    File.Delete(path);
+    if (!BotConfigLoader.Delete(configsDir, id)) return Results.NotFound();
+    var reload = await runtime.ReloadAsync();
+    if (!reload.Ok)
+        app.Logger.LogWarning("Bot {Tenant} apagado, mas o Runtime não recarregou: {Error}", id, reload.Error);
     return Results.NoContent();
 });
 
 // POST /api/bots — salva bot a partir dos dados do wizard
-app.MapPost("/api/bots", async (HttpRequest req) =>
+app.MapPost("/api/bots", async (HttpRequest req, RuntimeApiClient runtime) =>
 {
     using var doc = await JsonDocument.ParseAsync(req.Body);
     var root = doc.RootElement;
 
     var tenantId = root.GetProperty("tenantId").GetString()!.Trim().ToLower().Replace(" ", "-");
+    if (!BotConfigLoader.IsValidTenantId(tenantId))
+        return Results.BadRequest(new { error = "tenantId inválido: use letras, números, '-' ou '_' (até 64)." });
     var whatsappNumber = root.GetProperty("whatsappNumber").GetString()!;
     // Remove any non-digits
     whatsappNumber = System.Text.RegularExpressions.Regex.Replace(whatsappNumber, @"\D", "");
@@ -171,15 +170,17 @@ app.MapPost("/api/bots", async (HttpRequest req) =>
     };
 
     BotConfigLoader.Save(configsDir, config);
-    return Results.Created($"/api/bots/{tenantId}", new { tenantId });
+
+    // Sem reload o Runtime só veria o bot novo/alterado depois de reiniciar.
+    var reload = await runtime.ReloadAsync();
+    return Results.Created($"/api/bots/{tenantId}", new { tenantId, runtimeReloaded = reload.Ok, runtimeError = reload.Error });
 });
 
 // POST /api/bots/{id}/test — testa mensagem contra o bot (stateless, histórico vem do cliente)
 app.MapPost("/api/bots/{id}/test", async (string id, HttpRequest req) =>
 {
-    BotConfig config;
-    try { config = BotConfigLoader.Load(configsDir, id); }
-    catch (FileNotFoundException) { return Results.NotFound(); }
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var config = BotConfigLoader.Load(configsDir, id);
 
     using var doc = await JsonDocument.ParseAsync(req.Body);
     var root = doc.RootElement;

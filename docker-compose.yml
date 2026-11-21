@@ -65,6 +65,8 @@ services:
       # Rotas da Evolution v2 ficam na raiz (ex.: /message/sendText/{instancia}), sem "/api"
       Evolution__ApiUrl:         http://evolution-api:8080
       Evolution__ApiToken:       ${EVOLUTION_API_TOKEN:-change-me-default-token}
+      # Protege /api/admin e /api/handoff (o painel envia o mesmo valor). Vazio = rotas desligadas.
+      Runtime__AdminToken:       ${RUNTIME_ADMIN_TOKEN:-}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=evolution;Username=evolution;Password=evolution
       Database__AutoMigrate: "true"
     restart: unless-stopped
@@ -92,6 +94,7 @@ services:
       Wizard__AdminUser:  ${WIZARD_ADMIN_USER:-admin}
       Wizard__AdminPassword: ${WIZARD_ADMIN_PASSWORD:-change-me}
       Runtime__ApiUrl: http://runtime:8080
+      Runtime__AdminToken: ${RUNTIME_ADMIN_TOKEN:-}
     restart: unless-stopped
     depends_on:
       - runtime

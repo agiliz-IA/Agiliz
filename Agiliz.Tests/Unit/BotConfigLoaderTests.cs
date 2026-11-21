@@ -40,7 +40,7 @@ public sealed class BotConfigLoaderTests : IDisposable
         var config = TestFixtures.DefaultConfig(tenantId: "meu-bot");
         BotConfigLoader.Save(_dir.Path, config);
 
-        File.Exists(Path.Combine(_dir.Path, "meu-bot.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "bots", "meu-bot.json")).Should().BeTrue();
     }
 
     [Fact]
@@ -102,11 +102,75 @@ public sealed class BotConfigLoaderTests : IDisposable
     public void ListTenants_IgnoresNonJsonFiles()
     {
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "real-bot"));
-        File.WriteAllText(Path.Combine(_dir.Path, "lixo.txt"), "ignorar");
+        File.WriteAllText(Path.Combine(_dir.Path, "bots", "lixo.txt"), "ignorar");
 
         var tenants = BotConfigLoader.ListTenants(_dir.Path).ToList();
 
         tenants.Should().ContainSingle().Which.Should().Be("real-bot");
+    }
+
+    [Fact]
+    public void ListTenants_IgnoresSystemFilesInConfigsRoot()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "real-bot"));
+        File.WriteAllText(Path.Combine(_dir.Path, "billing.json"), "[]");
+        File.WriteAllText(Path.Combine(_dir.Path, "telemetry.json"), "[]");
+
+        BotConfigLoader.ListTenants(_dir.Path).Should().Equal("real-bot");
+    }
+
+    [Theory]
+    [InlineData("../billing")]
+    [InlineData("a/b")]
+    [InlineData("")]
+    [InlineData("com espaco")]
+    public void Load_WithInvalidTenantId_Throws(string tenantId)
+    {
+        var act = () => BotConfigLoader.Load(_dir.Path, tenantId);
+        act.Should().Throw<ArgumentException>();
+        BotConfigLoader.IsValidTenantId(tenantId).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Delete_RemovesConfigAndReturnsFalseWhenMissing()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "apagar"));
+
+        BotConfigLoader.Delete(_dir.Path, "apagar").Should().BeTrue();
+        BotConfigLoader.Delete(_dir.Path, "apagar").Should().BeFalse();
+        BotConfigLoader.ListTenants(_dir.Path).Should().BeEmpty();
+    }
+
+    // ─── Migração do layout antigo (configs/*.json → configs/bots/) ──────────
+
+    [Fact]
+    public void MigrateLegacyLayout_MovesOnlyBotConfigs()
+    {
+        File.WriteAllText(Path.Combine(_dir.Path, "dentista.json"), """{ "tenantId": "dentista", "whatsAppNumber": "1" }""");
+        File.WriteAllText(Path.Combine(_dir.Path, "billing.json"), """[{ "TenantId": "x" }]""");
+        File.WriteAllText(Path.Combine(_dir.Path, "google_credentials.json"), """{ "type": "service_account" }""");
+        File.WriteAllText(Path.Combine(_dir.Path, "outro.json"), """{ "qualquer": true }""");
+
+        var moved = BotConfigLoader.MigrateLegacyLayout(_dir.Path);
+
+        moved.Should().Equal("dentista");
+        File.Exists(Path.Combine(_dir.Path, "bots", "dentista.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "billing.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "google_credentials.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "outro.json")).Should().BeTrue();
+        BotConfigLoader.Load(_dir.Path, "dentista").WhatsAppNumber.Should().Be("1");
+    }
+
+    [Fact]
+    public void MigrateLegacyLayout_DoesNotOverwriteNewerConfig()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bot", systemPrompt: "novo"));
+        File.WriteAllText(Path.Combine(_dir.Path, "bot.json"), """{ "tenantId": "bot", "systemPrompt": "antigo" }""");
+
+        BotConfigLoader.MigrateLegacyLayout(_dir.Path).Should().BeEmpty();
+        BotConfigLoader.MigrateLegacyLayout(_dir.Path).Should().BeEmpty();
+
+        BotConfigLoader.Load(_dir.Path, "bot").SystemPrompt.Should().Be("novo");
     }
 
     public void Dispose() => _dir.Dispose();

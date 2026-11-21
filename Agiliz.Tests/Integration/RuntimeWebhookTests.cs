@@ -18,6 +18,7 @@ public sealed class RuntimeWebhookTests : IDisposable
     private readonly TempDirectory _dir = TestFixtures.CreateTempDir();
     private readonly FakeMessageProvider _fakeProvider = new();
     private readonly FakeLlmClient _fakeLlm = new();
+    private readonly FakeCostRecorder _costs = new();
 
     public RuntimeWebhookTests()
     {
@@ -39,6 +40,7 @@ public sealed class RuntimeWebhookTests : IDisposable
                 builder.ConfigureServices(services =>
                 {
                     services.AddSingleton<IMessageProvider>(_fakeProvider);
+                    services.AddSingleton<Agiliz.Core.Billing.ICostRecorder>(_costs);
                     // Provide a fake LLM factory so TenantRegistry never calls real APIs
                     services.AddSingleton<Func<BotConfig, ILlmClient>>(_ => _ => _fakeLlm);
                 });
@@ -224,6 +226,8 @@ public sealed class RuntimeWebhookTests : IDisposable
         _fakeLlm.ReceivedHistories[0].Should().Contain(m =>
             m.Role == MessageRole.User && m.Content.Contains("quero marcar uma consulta"));
         _fakeProvider.Sent.Should().ContainSingle(m => m.Body == "Claro! Para qual dia?");
+        _costs.Entries.Should().Contain(e => e.TenantId == "test-bot" && e.Description.StartsWith("Transcrição de áudio"));
+        _costs.Entries.Should().Contain(e => e.TenantId == "test-bot" && e.Type == CostType.TokensLLM);
     }
 
     private sealed class FakeTranscriber(string text) : Agiliz.Core.Media.IAudioTranscriber

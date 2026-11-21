@@ -2,45 +2,98 @@
 @using Agiliz.Core.Billing
 @using Agiliz.Core.Models
 @using Agiliz.Wizard.Components.Atoms
-@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@inject Agiliz.Wizard.Services.RuntimeApiClient Runtime
 
 <div class="page-header">
     <div>
         <div class="page-title">Financeiro & Faturamento</div>
-        <div class="page-sub">Controle o Total Cost of Ownership (TCO) dos tenantes e APIs</div>
+        <div class="page-sub">Custo de LLM e ferramentas por cliente, gravado pelo Runtime no Postgres</div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        @foreach (var (key, label) in Periods)
+        {
+            <AgilizButton Variant="@(key == _period ? "primary" : "ghost")" Small="true" OnClick="() => ChangePeriod(key)">@label</AgilizButton>
+        }
     </div>
 </div>
 
 <div class="wizard-content">
-    
+
+    @if (_error is not null)
+    {
+        <div class="form-card" style="color: var(--red, #e5484d); margin-bottom: 20px;">
+            Não foi possível carregar o billing do Runtime: @_error
+        </div>
+    }
+
     <div style="display: flex; gap: 20px; margin-bottom: 30px;">
         <div class="form-card" style="flex: 1; text-align: center;">
             <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO TOTAL (TCO)</div>
             <div style="font-size: 32px; font-weight: 700; color: var(--accent); margin-top: 8px;">
-                $ @TotalUsd.ToString("0.000")
+                $ @Report.TotalUsd.ToString("0.000")
             </div>
         </div>
         <div class="form-card" style="flex: 1; text-align: center;">
             <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO LLM (TOKENS)</div>
             <div style="font-size: 32px; font-weight: 700; color: var(--teal); margin-top: 8px;">
-                $ @LlmUsd.ToString("0.000")
+                $ @Report.Tenants.Sum(t => t.LlmUsd).ToString("0.000")
             </div>
         </div>
         <div class="form-card" style="flex: 1; text-align: center;">
             <div style="color: var(--text-3); font-size: 13px; font-weight: 600;">CUSTO FERRAMENTAS</div>
             <div style="font-size: 32px; font-weight: 700; color: var(--yellow); margin-top: 8px;">
-                $ @ToolsUsd.ToString("0.000")
+                $ @Report.Tenants.Sum(t => t.ToolsUsd).ToString("0.000")
             </div>
         </div>
     </div>
 
-    <div class="form-card">
-        <h4 style="margin-bottom: 20px; font-family: var(--mono); color: var(--text-2);">Extrato de Lançamentos</h4>
+    @if (Report.Tenants.Count > 0)
+    {
+        <div class="form-card" style="margin-bottom: 30px;">
+            <h4 style="margin-bottom: 20px; font-family: var(--mono); color: var(--text-2);">Por cliente</h4>
+            <table class="billing-table">
+                <thead>
+                    <tr>
+                        <th>Tenant</th>
+                        <th style="text-align: right;">Lançamentos</th>
+                        <th style="text-align: right;">LLM (USD)</th>
+                        <th style="text-align: right;">Ferramentas (USD)</th>
+                        <th style="text-align: right;">Total (USD)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Report.Tenants)
+                    {
+                        <tr>
+                            <td><AgilizBadge Text="@t.TenantId" ColorType="groq" /></td>
+                            <td style="text-align: right; font-family: var(--mono);">@t.Count</td>
+                            <td style="text-align: right; font-family: var(--mono);">$@t.LlmUsd.ToString("0.0000")</td>
+                            <td style="text-align: right; font-family: var(--mono);">$@t.ToolsUsd.ToString("0.0000")</td>
+                            <td style="text-align: right; font-family: var(--mono); color: var(--text);">$@t.TotalUsd.ToString("0.0000")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 
-        @if (Entries.Count == 0)
+    <div class="form-card">
+        <h4 style="margin-bottom: 20px; font-family: var(--mono); color: var(--text-2);">
+            Extrato de Lançamentos
+            @if (Report.EntryCount > Report.Entries.Count)
+            {
+                <span style="color: var(--text-3); font-size: 12px;">(últimos @Report.Entries.Count de @Report.EntryCount)</span>
+            }
+        </h4>
+
+        @if (_loading)
+        {
+            <div style="text-align: center; color: var(--text-3); padding: 40px 0;">carregando...</div>
+        }
+        else if (Report.Entries.Count == 0)
         {
             <div style="text-align: center; color: var(--text-3); padding: 40px 0;">
-                Nenhum custo registrado no momento. Comece a conversar com os bots!
+                Nenhum custo registrado no período. Comece a conversar com os bots!
             </div>
         }
         else
@@ -56,7 +109,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var entry in Entries.OrderByDescending(e => e.Timestamp))
+                    @foreach (var entry in Report.Entries)
                     {
                         <tr>
                             <td>@entry.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
@@ -88,15 +141,49 @@
 </div>
 
 @code {
-    private List<CostEntry> Entries = new();
+    private static readonly (string Key, string Label)[] Periods =
+    [
+        ("month", "Este mês"),
+        ("30d", "Últimos 30 dias"),
+        ("all", "Tudo")
+    ];
 
-    private decimal TotalUsd => Entries.Sum(e => e.AmountUsd);
-    private decimal LlmUsd => Entries.Where(e => e.Type == CostType.TokensLLM).Sum(e => e.AmountUsd);
-    private decimal ToolsUsd => Entries.Where(e => e.Type == CostType.ToolExecution).Sum(e => e.AmountUsd);
+    private string _period = "month";
+    private bool _loading = true;
+    private string? _error;
+    private BillingReport Report = new();
 
-    protected override void OnInitialized()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private Task ChangePeriod(string period)
     {
-        var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
-        Entries = BillingStore.GetEntries(dir);
+        _period = period;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var now = DateTimeOffset.Now;
+            DateTimeOffset? from = _period switch
+            {
+                "month" => new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset),
+                "30d" => now.AddDays(-30),
+                _ => null
+            };
+            Report = await Runtime.GetBillingAsync(from, to: null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            _error = ex.Message;
+            Report = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 }

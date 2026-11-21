@@ -74,6 +74,20 @@ SMTP_USER="seu-email@dominio.com"
 SMTP_PASS="suaSenha"
 ```
 
+### Pasta `configs/` (não versionada)
+```
+configs/
+  bots/{tenantId}.json      ← um arquivo por bot (criado pelo painel ou pelo CLI)
+  google_credentials.json   ← credenciais do Google Calendar
+  telemetry.json
+```
+Bots que ainda estiverem soltos na raiz (`configs/*.json`, layout antigo) são movidos para `configs/bots/` na primeira vez que o Runtime, o painel ou o CLI iniciam.
+
+Os custos (LLM, ferramentas, transcrição) ficam na tabela `CostRecords` do Postgres, gravada pelo Runtime. O `configs/billing.json` antigo não é mais lido.
+
+### Painel ↔ Runtime
+O painel chama o Runtime para ativar bots sem reiniciar (`POST /api/admin/reload`), ler o financeiro (`GET /api/admin/billing`) e operar o handoff. Essas rotas exigem o header `X-Admin-Token` com o valor de `RUNTIME_ADMIN_TOKEN` (no `.env`, usado pelos dois containers). Em `dotnet run` local (Development) e sem token, as rotas ficam abertas.
+
 ### 2. Rodando o Painel de Controle (Wizard)
 Siga os guias de configuração do seu primeiro Bot diretamente do seu navegador:
 ```bash

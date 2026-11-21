@@ -6,7 +6,7 @@ namespace Agiliz.Runtime.Services;
 /// Núcleo de processamento de uma mensagem recebida.
 /// Ordem: flow match → LLM. Sem side effects (não envia nada, só retorna string).
 /// </summary>
-public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools, Microsoft.Extensions.Configuration.IConfiguration config)
+public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, IEnumerable<Agiliz.Core.Tools.ITool> tools, Agiliz.Core.Billing.ICostRecorder costs)
 {
     public async Task<string?> ProcessAsync(
         TenantEntry tenant,
@@ -95,13 +95,12 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
         }
     }
 
-    /// <summary>Registra um custo do tenant no billing (LLM, tools, transcrição...).</summary>
+    /// <summary>Registra um custo do tenant no billing (LLM, tools, transcrição...). Só enfileira; não espera o banco.</summary>
     public void RecordCost(string tenantId, CostType type, string description, decimal amountUsd)
     {
         try
         {
-            var dir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
-            Agiliz.Core.Billing.BillingStore.Record(dir, new CostEntry { TenantId = tenantId, Type = type, Description = description, AmountUsd = amountUsd });
+            costs.Record(new CostEntry { TenantId = tenantId, Type = type, Description = description, AmountUsd = amountUsd });
         }
         catch (Exception ex)
         {

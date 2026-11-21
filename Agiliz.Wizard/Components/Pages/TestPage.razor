@@ -70,7 +70,7 @@
     {
         try
         {
-            var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            var dir = Agiliz.Core.Config.BotConfigLoader.ResolveConfigsDir(Config);
             _config = BotConfigLoader.Load(dir, TenantId);
             _llm = LlmClientFactory.Create(_config, new HttpClient());
             

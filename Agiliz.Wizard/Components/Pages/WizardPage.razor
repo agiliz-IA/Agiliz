@@ -6,6 +6,7 @@
 @using Agiliz.Core.Config
 @using Agiliz.Core.Models
 @inject WizardSessionStore SessionStore
+@inject RuntimeApiClient Runtime
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
@@ -156,7 +157,7 @@
             
             // Tentativa de carregar config antiga para pegar numero
             try {
-                var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+                var dir = BotConfigLoader.ResolveConfigsDir(Config);
                 var config = BotConfigLoader.Load(dir, _tenantId);
                 _whatsAppNumber = config.WhatsAppNumber;
             } catch {}
@@ -172,6 +173,11 @@
         }
 
         _tenantId = _tenantId.Trim().ToLower().Replace(" ", "-");
+        if (!BotConfigLoader.IsValidTenantId(_tenantId))
+        {
+            await JS.InvokeVoidAsync("toast", "Tenant ID inválido: use letras, números, '-' ou '_'.", "error");
+            return;
+        }
         // Remove any non-digits from WhatsApp number as well, to be safe
         _whatsAppNumber = System.Text.RegularExpressions.Regex.Replace(_whatsAppNumber, @"\D", "");
 
@@ -268,7 +274,7 @@
     {
         if (_extractedConfig == null) return;
         
-        var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        var dir = BotConfigLoader.ResolveConfigsDir(Config);
         
         var finalConfig = new BotConfig
         {
@@ -289,7 +295,13 @@
         };
 
         BotConfigLoader.Save(dir, finalConfig);
-        await JS.InvokeVoidAsync("toast", $"Bot {_tenantId} salvo com sucesso!", "success");
+
+        // Ativa no Runtime sem reiniciar o servidor.
+        var reload = await Runtime.ReloadAsync();
+        if (reload.Ok)
+            await JS.InvokeVoidAsync("toast", $"Bot {_tenantId} salvo e ativo no Runtime!", "success");
+        else
+            await JS.InvokeVoidAsync("toast", $"Bot {_tenantId} salvo, mas o Runtime não recarregou: {reload.Error}", "error");
         SessionStore.Remove(Guid.Parse(_sessionId));
         
         NavManager.NavigateTo("/");

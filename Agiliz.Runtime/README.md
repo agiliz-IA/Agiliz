@@ -110,4 +110,5 @@ Envie uma mensagem de um **outro celular** para o número de WhatsApp que você 
 
 - **O Webhook não está sendo ativado:** Verifique nos logs do Evolution se o evento `MESSAGES_UPSERT` está ativado e se a URL do webhook não possui erros de digitação.
 - **O bot recebe a mensagem, mas não responde:** Pode ser um erro na requisição do Agiliz para o Evolution na hora da resposta. Verifique os logs do Runtime com o comando: `docker logs agiliz-runtime -f`
+- **Bot novo ou editado não responde:** o painel pede o reload ao salvar. Se o JSON foi mudado à mão em `configs/bots/`, recarregue com `curl -X POST -H "X-Admin-Token: $RUNTIME_ADMIN_TOKEN" http://localhost:5000/api/admin/reload` — a resposta lista os bots carregados e os que deram erro.
 - **Token inválido:** Verifique se o `EVOLUTION_API_TOKEN` no `.env` do Runtime é exatamente o mesmo configurado e usado na API Global do Evolution.

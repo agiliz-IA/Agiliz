@@ -103,7 +103,7 @@
     {
         try
         {
-            var dir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+            var dir = Agiliz.Core.Config.BotConfigLoader.ResolveConfigsDir(Config);
             var path = Path.Combine(dir, "telemetry.json");
 
             var entry = new

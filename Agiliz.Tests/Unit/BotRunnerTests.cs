@@ -12,13 +12,37 @@ public sealed class BotRunnerTests
 {
     private readonly FakeLlmClient _llm = new();
     private readonly SessionStore _sessions = new();
+    private readonly FakeCostRecorder _costs = new();
     private readonly BotRunner _runner;
 
     public BotRunnerTests()
     {
-        var mockConfig = new Moq.Mock<Microsoft.Extensions.Configuration.IConfiguration>();
-        mockConfig.Setup(c => c["ConfigsDir"]).Returns((string?)null);
-        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance, Array.Empty<Agiliz.Core.Tools.ITool>(), mockConfig.Object);
+        _runner = new BotRunner(_sessions, NullLogger<BotRunner>.Instance, Array.Empty<Agiliz.Core.Tools.ITool>(), _costs);
+    }
+
+    // ─── Billing ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ProcessAsync_WhenLlmAnswers_RecordsTokenCostForTenant()
+    {
+        _llm.Returns("Olá!");
+
+        await _runner.ProcessAsync(Tenant(TestFixtures.DefaultConfig(tenantId: "clinica")), "+5521999", "bom dia");
+
+        var entry = _costs.Entries.Should().ContainSingle().Subject;
+        entry.TenantId.Should().Be("clinica");
+        entry.Type.Should().Be(CostType.TokensLLM);
+        entry.AmountUsd.Should().Be(Agiliz.Core.LLM.ModelCatalog.EstimateCostUsd("openai/gpt-oss-120b", new TokenUsage(10, 20)));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FlowMatch_RecordsNoCost()
+    {
+        var config = TestFixtures.DefaultConfig().WithFlows(("oi", "Olá!"));
+
+        await _runner.ProcessAsync(Tenant(config), "+5521999", "oi");
+
+        _costs.Entries.Should().BeEmpty();
     }
 
     private TenantEntry Tenant(BotConfig config) => new(config, _llm);

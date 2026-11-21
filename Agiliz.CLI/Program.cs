@@ -6,6 +6,10 @@ using Spectre.Console;
 var configsDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs");
 configsDir = Path.GetFullPath(configsDir);
 
+// Layout antigo (configs/*.json) → configs/bots/
+foreach (var moved in Agiliz.Core.Config.BotConfigLoader.MigrateLegacyLayout(configsDir))
+    AnsiConsole.MarkupLine($"[grey]Bot '{moved}' movido para configs/bots/[/]");
+
 ConsoleRenderer.Header();
 
 var command = args.ElementAtOrDefault(0)?.ToLower();

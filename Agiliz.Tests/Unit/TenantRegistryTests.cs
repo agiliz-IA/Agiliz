@@ -77,12 +77,54 @@ public sealed class TenantRegistryTests : IDisposable
         // Salva um config válido
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bom", whatsappNumber: "1"));
         // Salva um JSON corrompido manualmente
-        File.WriteAllText(Path.Combine(_dir.Path, "corrompido.json"), "{ invalido }");
+        File.WriteAllText(Path.Combine(_dir.Path, "bots", "corrompido.json"), "{ invalido }");
 
         var registry = BuildRegistry();
 
         registry.Count.Should().Be(1);
         registry.Resolve("1").Should().NotBeNull();
+    }
+
+    // ─── Reload sem reiniciar ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Reload_PicksUpNewAndRemovedBots()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "antigo", whatsappNumber: "1"));
+        var registry = BuildRegistry();
+
+        BotConfigLoader.Delete(_dir.Path, "antigo");
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "novo", whatsappNumber: "2"));
+        var result = registry.Reload();
+
+        result.Loaded.Should().Equal("novo");
+        result.Removed.Should().Equal("antigo");
+        registry.Resolve("1").Should().BeNull();
+        registry.Resolve("2")!.Config.TenantId.Should().Be("novo");
+    }
+
+    [Fact]
+    public void Reload_AppliesEditedConfig()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bot", whatsappNumber: "1", systemPrompt: "v1"));
+        var registry = BuildRegistry();
+
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "bot", whatsappNumber: "1", systemPrompt: "v2"));
+        registry.Reload();
+
+        registry.Resolve("1")!.Config.SystemPrompt.Should().Be("v2");
+    }
+
+    [Fact]
+    public void Reload_DuplicateNumber_KeepsFirstAndReportsError()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "a-primeiro", whatsappNumber: "1"));
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "b-repetido", whatsappNumber: "1"));
+
+        var result = BuildRegistry().Reload();
+
+        result.Loaded.Should().Equal("a-primeiro");
+        result.Errors.Should().ContainSingle(e => e.TenantId == "b-repetido");
     }
 
     public void Dispose()

@@ -2,6 +2,8 @@
 @using Agiliz.Core.Config
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject NavigationManager NavManager
+@inject Agiliz.Wizard.Services.RuntimeApiClient Runtime
+@inject IJSRuntime JS
 
 <div class="page-header">
     <div>
@@ -56,7 +58,7 @@
 
     protected override void OnInitialized()
     {
-        _configsDir = Config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        _configsDir = BotConfigLoader.ResolveConfigsDir(Config);
         LoadBots();
     }
 
@@ -77,14 +79,17 @@
         }).ToList();
     }
 
-    private void DeleteBot(string id)
+    private async Task DeleteBot(string id)
     {
-        var path = Path.Combine(_configsDir, $"{id}.json");
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-            LoadBots();
-        }
+        if (!BotConfigLoader.Delete(_configsDir, id)) return;
+        LoadBots();
+
+        // O Runtime só para de atender o número depois de recarregar.
+        var reload = await Runtime.ReloadAsync();
+        if (reload.Ok)
+            await JS.InvokeVoidAsync("toast", $"Bot {id} removido e desligado no Runtime.", "success");
+        else
+            await JS.InvokeVoidAsync("toast", $"Bot {id} removido, mas o Runtime não recarregou: {reload.Error}", "error");
     }
 
     private record BotViewModel(string TenantId, string WhatsAppNumber, string Provider, int FlowCount);

@@ -5,44 +5,87 @@ using Agiliz.Core.Models;
 namespace Agiliz.Runtime.Services;
 
 /// <summary>
-/// Carregado uma única vez na startup.
 /// Mapeia número WhatsApp → (BotConfig, ILlmClient) para lookup O(1) por mensagem recebida.
+/// Carrega configs/bots na startup e de novo a cada <see cref="Reload"/> (POST /api/admin/reload),
+/// sem reiniciar o processo. A troca é atômica: quem está atendendo uma mensagem continua com o
+/// snapshot antigo até terminar.
 /// </summary>
 public sealed class TenantRegistry
 {
-    private readonly Dictionary<string, TenantEntry> _byNumber;
+    private readonly string _configsDir;
+    private readonly ILogger<TenantRegistry> _logger;
+    private readonly Func<BotConfig, ILlmClient> _llmFactory;
+    private readonly Lock _reloadLock = new();
+    private volatile Dictionary<string, TenantEntry> _byNumber = new(StringComparer.OrdinalIgnoreCase);
 
     public TenantRegistry(
         string configsDir,
         ILogger<TenantRegistry> logger,
         Func<BotConfig, ILlmClient>? llmFactory = null)
     {
-        _byNumber = new Dictionary<string, TenantEntry>(StringComparer.OrdinalIgnoreCase);
+        _configsDir = configsDir;
+        _logger = logger;
+        _llmFactory = llmFactory ?? (config => LlmClientFactory.Create(config, new HttpClient()));
+        Reload();
+    }
 
-        llmFactory ??= config => LlmClientFactory.Create(config, new HttpClient());
+    public DateTimeOffset LoadedAt { get; private set; }
 
-        var tenants = BotConfigLoader.ListTenants(configsDir).ToList();
-
-        if (tenants.Count == 0)
-            logger.LogWarning("Nenhum config encontrado em '{Dir}'. Nenhum bot ativo.", configsDir);
-
-        foreach (var id in tenants)
+    /// <summary>Relê todos os configs. Um config com erro é pulado; os demais continuam ativos.</summary>
+    public TenantReloadResult Reload()
+    {
+        lock (_reloadLock)
         {
-            try
+            var next = new Dictionary<string, TenantEntry>(StringComparer.OrdinalIgnoreCase);
+            var errors = new List<TenantLoadError>();
+            var tenants = BotConfigLoader.ListTenants(_configsDir).ToList();
+
+            if (tenants.Count == 0)
+                _logger.LogWarning("Nenhum config encontrado em '{Dir}'. Nenhum bot ativo.", BotConfigLoader.BotsDir(_configsDir));
+
+            foreach (var id in tenants)
             {
-                var config = BotConfigLoader.Load(configsDir, id);
-                var llm = llmFactory(config);
-                if (string.IsNullOrWhiteSpace(config.WhatsAppNumber))
+                try
                 {
-                    logger.LogError("Config do tenant '{Id}' sem WhatsAppNumber. Ignorando.", id);
-                    continue;
+                    var config = BotConfigLoader.Load(_configsDir, id);
+                    if (string.IsNullOrWhiteSpace(config.WhatsAppNumber))
+                    {
+                        Fail(id, "Config sem WhatsAppNumber.");
+                        continue;
+                    }
+                    if (next.TryGetValue(config.WhatsAppNumber, out var other))
+                    {
+                        Fail(id, $"Número {config.WhatsAppNumber} já usado pelo bot '{other.Config.TenantId}'.");
+                        continue;
+                    }
+
+                    next[config.WhatsAppNumber] = new TenantEntry(config, _llmFactory(config));
+                    _logger.LogInformation("Bot carregado: {Tenant} → {Number}", id, config.WhatsAppNumber);
                 }
-                _byNumber[config.WhatsAppNumber] = new TenantEntry(config, llm);
-                logger.LogInformation("Bot carregado: {Tenant} → {Number}", id, config.WhatsAppNumber);
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Falha ao carregar config do tenant '{Id}'. Ignorando.", id);
+                    errors.Add(new TenantLoadError(id, ex.Message));
+                }
             }
-            catch (Exception ex)
+
+            var removed = _byNumber.Values.Select(e => e.Config.TenantId)
+                .Except(next.Values.Select(e => e.Config.TenantId), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _byNumber = next;
+            LoadedAt = DateTimeOffset.UtcNow;
+
+            return new TenantReloadResult(
+                next.Values.Select(e => e.Config.TenantId).Order(StringComparer.OrdinalIgnoreCase).ToList(),
+                removed,
+                errors,
+                LoadedAt);
+
+            void Fail(string id, string reason)
             {
-                logger.LogError(ex, "Falha ao carregar config do tenant '{Id}'. Ignorando.", id);
+                _logger.LogError("Config do tenant '{Id}' ignorado: {Reason}", id, reason);
+                errors.Add(new TenantLoadError(id, reason));
             }
         }
     }
@@ -63,3 +106,11 @@ public sealed class TenantRegistry
 }
 
 public sealed record TenantEntry(BotConfig Config, ILlmClient LlmClient);
+
+public sealed record TenantLoadError(string TenantId, string Error);
+
+public sealed record TenantReloadResult(
+    IReadOnlyList<string> Loaded,
+    IReadOnlyList<string> Removed,
+    IReadOnlyList<TenantLoadError> Errors,
+    DateTimeOffset LoadedAt);

@@ -15,11 +15,11 @@ public sealed class WizardSession
 
 public sealed class WizardSessionStore
 {
-    private readonly string _configsDir;
+    private readonly RuntimeApiClient _runtime;
 
-    public WizardSessionStore(Microsoft.Extensions.Configuration.IConfiguration config)
+    public WizardSessionStore(RuntimeApiClient runtime)
     {
-        _configsDir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        _runtime = runtime;
     }
 
     private const string MetaSystemPrompt = """
@@ -152,7 +152,7 @@ public sealed class WizardSessionStore
         session.History.Add(ConversationMessage.Assistant(reply));
 
         var tokenCostUsd = ModelCatalog.EstimateCostUsd(ModelCatalog.DefaultGroqModel, response.Usage);
-        Agiliz.Core.Billing.BillingStore.Record(_configsDir, new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd });
+        await _runtime.RecordCostAsync(new CostEntry { TenantId = "painel-admin", Type = CostType.TokensLLM, Description = $"Wizard MetaAgent ({response.Usage.Total} tok)", AmountUsd = tokenCostUsd }, ct);
 
         var configReady = reply.Contains("===JSON_START===") && reply.Contains("===JSON_END===");
         string? jsonConfig = null;

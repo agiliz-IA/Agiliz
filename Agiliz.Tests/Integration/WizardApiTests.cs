@@ -6,6 +6,9 @@ using Agiliz.Core.Config;
 using Agiliz.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using WireMock.RequestBuilders;
+using WireMock.ResponseBuilders;
+using WireMock.Server;
 using Xunit;
 
 namespace Agiliz.Tests.Integration;
@@ -14,15 +17,26 @@ public sealed class WizardApiTests : IDisposable
 {
     private readonly TempDirectory _dir = TestFixtures.CreateTempDir();
 
+    // Runtime falso: o painel chama POST /api/admin/reload depois de salvar ou apagar um bot.
+    private readonly WireMockServer _runtime = WireMockServer.Start();
+
     public WizardApiTests()
     {
         Environment.SetEnvironmentVariable("GROQ_API_KEY",      "fake-groq-key");
         Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", "fake-anthropic-key");
+        _runtime.Given(Request.Create().WithPath("/api/admin/reload").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { loaded = Array.Empty<string>() }));
     }
 
     private WebApplicationFactory<Agiliz.Wizard.Program> BuildFactory() =>
         new WebApplicationFactory<Agiliz.Wizard.Program>()
-            .WithWebHostBuilder(b => b.UseSetting("ConfigsDir", _dir.Path));
+            .WithWebHostBuilder(b => b
+                .UseSetting("ConfigsDir", _dir.Path)
+                .UseSetting("Runtime:ApiUrl", _runtime.Url)
+                .UseSetting("Runtime:AdminToken", "token-do-painel"));
+
+    private IEnumerable<WireMock.Logging.ILogEntry> ReloadCalls() =>
+        _runtime.LogEntries.Where(e => e.RequestMessage.Path == "/api/admin/reload");
 
     private static StringContent Json(object body) =>
         new(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
@@ -91,7 +105,7 @@ public sealed class WizardApiTests : IDisposable
         var response = await factory.CreateClient().PostAsync("/api/bots", Json(payload));
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        File.Exists(Path.Combine(_dir.Path, "novo-bot.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "bots", "novo-bot.json")).Should().BeTrue();
     }
 
     [Fact]
@@ -110,7 +124,7 @@ public sealed class WizardApiTests : IDisposable
 
         await factory.CreateClient().PostAsync("/api/bots", Json(payload));
 
-        File.Exists(Path.Combine(_dir.Path, "meu-bot-legal.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "bots", "meu-bot-legal.json")).Should().BeTrue();
     }
 
     [Fact]
@@ -122,7 +136,7 @@ public sealed class WizardApiTests : IDisposable
         var response = await factory.CreateClient().DeleteAsync("/api/bots/deletar-me");
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        File.Exists(Path.Combine(_dir.Path, "deletar-me.json")).Should().BeFalse();
+        File.Exists(Path.Combine(_dir.Path, "bots", "deletar-me.json")).Should().BeFalse();
     }
 
     [Fact]
@@ -160,8 +174,76 @@ public sealed class WizardApiTests : IDisposable
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task PostBot_ReloadsRuntimeWithAdminToken()
+    {
+        using var factory = BuildFactory();
+        var payload = new { tenantId = "bot-novo", whatsappNumber = "5521999", provider = "Groq", systemPrompt = "Teste.", flows = Array.Empty<object>() };
+
+        var response = await factory.CreateClient().PostAsync("/api/bots", Json(payload));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("runtimeReloaded").GetBoolean().Should().BeTrue();
+        var call = ReloadCalls().Should().ContainSingle().Subject;
+        call.RequestMessage.Headers!["X-Admin-Token"].Should().ContainSingle().Which.Should().Be("token-do-painel");
+    }
+
+    [Fact]
+    public async Task PostBot_WhenRuntimeIsDown_StillSavesAndReportsIt()
+    {
+        _runtime.Stop();
+        using var factory = BuildFactory();
+        var payload = new { tenantId = "bot-offline", whatsappNumber = "5521999", provider = "Groq", systemPrompt = "Teste.", flows = Array.Empty<object>() };
+
+        var response = await factory.CreateClient().PostAsync("/api/bots", Json(payload));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("runtimeReloaded").GetBoolean().Should().BeFalse();
+        File.Exists(Path.Combine(_dir.Path, "bots", "bot-offline.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PostBot_WithPathInTenantId_Returns400()
+    {
+        using var factory = BuildFactory();
+        var payload = new { tenantId = "../billing", whatsappNumber = "1", provider = "Groq", systemPrompt = "x", flows = Array.Empty<object>() };
+
+        var response = await factory.CreateClient().PostAsync("/api/bots", Json(payload));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Directory.GetFiles(_dir.Path, "*.json", SearchOption.AllDirectories).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteBot_ReloadsRuntime()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "sai"));
+        using var factory = BuildFactory();
+
+        await factory.CreateClient().DeleteAsync("/api/bots/sai");
+
+        ReloadCalls().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Startup_MovesLegacyBotFilesIntoBotsFolder()
+    {
+        File.WriteAllText(Path.Combine(_dir.Path, "antigo.json"), """{ "tenantId": "antigo", "whatsAppNumber": "1" }""");
+        File.WriteAllText(Path.Combine(_dir.Path, "telemetry.json"), "[]");
+
+        using var factory = BuildFactory();
+        var body = await factory.CreateClient().GetFromJsonAsync<JsonElement[]>("/api/bots");
+
+        body!.Select(b => b.GetProperty("tenantId").GetString()).Should().Equal("antigo");
+        File.Exists(Path.Combine(_dir.Path, "bots", "antigo.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_dir.Path, "telemetry.json")).Should().BeTrue();
+    }
+
     public void Dispose()
     {
+        _runtime.Stop();
         _dir.Dispose();
         Environment.SetEnvironmentVariable("GROQ_API_KEY",      null);
         Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);

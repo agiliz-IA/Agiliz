@@ -15,7 +15,7 @@ public sealed class GoogleCalendarService
     {
         _logger = logger;
 
-        var configsDir = config["ConfigsDir"] ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "configs"));
+        var configsDir = Agiliz.Core.Config.BotConfigLoader.ResolveConfigsDir(config);
         var keyPath = Path.Combine(configsDir, "google_credentials.json");
 
         if (!File.Exists(keyPath))
