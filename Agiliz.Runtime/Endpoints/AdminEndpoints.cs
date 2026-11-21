@@ -25,9 +25,27 @@ public static class AdminEndpoints
         admin.MapGet("/billing", GetBillingAsync);
         admin.MapPost("/billing", RecordCost).DisableAntiforgery();
 
+        // Franquia: contatos diferentes por cliente no mês ("yyyy-MM"; padrão = mês atual em Brasília).
+        admin.MapGet("/usage", GetUsageAsync);
+
         // Botão "Testar conexão" do painel e dados que o painel mostra (ex.: e-mail para compartilhar a agenda).
         admin.MapGet("/integrations/info", (IntegrationTester tester) => Results.Ok(tester.Info()));
         admin.MapPost("/integrations/{integrationId}/test", TestIntegrationAsync).DisableAntiforgery();
+    }
+
+    private static async Task<IResult> GetUsageAsync(AgilizDbContext db, string? month, CancellationToken ct)
+    {
+        month ??= Agiliz.Core.Plans.UsageMonth.Current();
+        if (!Agiliz.Core.Plans.UsageMonth.IsValid(month))
+            return Results.BadRequest(new { error = "month no formato yyyy-MM." });
+
+        var usage = await db.ContactActivities
+            .Where(c => c.Month == month)
+            .GroupBy(c => c.TenantId)
+            .Select(g => new Agiliz.Core.Plans.TenantUsage { TenantId = g.Key, Contacts = g.Count(), Messages = g.Sum(c => c.MessageCount) })
+            .ToListAsync(ct);
+
+        return Results.Ok(new { month, tenants = usage });
     }
 
     private static async Task<IResult> TestIntegrationAsync(

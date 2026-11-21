@@ -30,7 +30,10 @@ public sealed record BotConfig
     /// </summary>
     public Dictionary<string, IntegrationSettings>? Integrations { get; init; }
 
-    /// <summary>Quanto cobramos do cliente por mês (R$). Usado na margem do Financeiro; virá do plano na fase 2.</summary>
+    /// <summary>Plano contratado (configs/plans/{id}.json): franquia, integrações incluídas e preço.</summary>
+    public string? PlanId { get; init; }
+
+    /// <summary>Preço mensal negociado (R$). Quando vazio, vale o preço do plano mais os adicionais ligados.</summary>
     public decimal? MonthlyPriceBrl { get; init; }
 }
 

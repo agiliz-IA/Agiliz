@@ -126,5 +126,18 @@ public sealed class RuntimeApiClient(IHttpClientFactory httpFactory, ILogger<Run
         }
     }
 
+    /// <summary>Contatos por cliente no mês ("yyyy-MM"). Lança exceção se o Runtime não responder.</summary>
+    public async Task<IReadOnlyList<Agiliz.Core.Plans.TenantUsage>> GetUsageAsync(string month, CancellationToken ct = default)
+    {
+        using var response = await CreateClient().GetAsync($"api/admin/usage?month={Uri.EscapeDataString(month)}", ct);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {Shorten(await response.Content.ReadAsStringAsync(ct))}");
+
+        var body = await response.Content.ReadFromJsonAsync<UsageResponse>(JsonOpts, ct);
+        return body?.Tenants ?? [];
+    }
+
+    private sealed record UsageResponse(string Month, List<Agiliz.Core.Plans.TenantUsage> Tenants);
+
     private static string Shorten(string text) => text.Length <= 200 ? text : text[..200] + "…";
 }

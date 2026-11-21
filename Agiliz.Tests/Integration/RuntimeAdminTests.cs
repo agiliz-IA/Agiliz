@@ -235,6 +235,54 @@ public sealed class RuntimeAdminTests : IDisposable
         post.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    // ─── Franquia: contatos por mês (P2) ──────────────────────────────────────
+
+    private static StringContent MessageFrom(string instance, string phone, string text) => new(JsonSerializer.Serialize(new
+    {
+        @event = "messages.upsert",
+        instance,
+        data = new
+        {
+            key = new { remoteJid = $"{phone}@s.whatsapp.net", fromMe = false, id = Guid.NewGuid().ToString() },
+            message = new { conversation = text }
+        }
+    }), Encoding.UTF8, "application/json");
+
+    [Fact]
+    public async Task Usage_CountsDistinctContactsPerMonth()
+    {
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "clinica", whatsappNumber: "5521900000006")
+            .WithFlows(("oi", "Olá!")));
+        using var factory = BuildFactory();
+        var client = Client(factory);
+
+        await client.PostAsync("/webhook", MessageFrom("5521900000006", "5521911110001", "oi"));
+        await client.PostAsync("/webhook", MessageFrom("5521900000006", "5521911110001", "oi de novo"));
+        await client.PostAsync("/webhook", MessageFrom("5521900000006", "5521911110002", "oi"));
+
+        var month = Agiliz.Core.Plans.UsageMonth.Current();
+        JsonElement tenant = default;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            var body = await client.GetFromJsonAsync<JsonElement>($"/api/admin/usage?month={month}");
+            var tenants = body.GetProperty("tenants").EnumerateArray().ToList();
+            if (tenants.Count == 1 && tenants[0].GetProperty("messages").GetInt32() == 3) { tenant = tenants[0]; break; }
+            await Task.Delay(50);
+        }
+
+        tenant.ValueKind.Should().Be(JsonValueKind.Object, "o UsageRecorder deveria ter gravado as 3 mensagens");
+        tenant.GetProperty("tenantId").GetString().Should().Be("clinica");
+        tenant.GetProperty("contacts").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Usage_InvalidMonth_Returns400()
+    {
+        using var factory = BuildFactory();
+        (await Client(factory).GetAsync("/api/admin/usage?month=nov")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     // ─── Testar conexão (I5) ──────────────────────────────────────────────────
 
     [Fact]

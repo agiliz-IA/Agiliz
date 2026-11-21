@@ -1,0 +1,201 @@
+@page "/plans"
+@using System.Globalization
+@using Agiliz.Core.Integrations
+@using Agiliz.Core.Plans
+@using Agiliz.Wizard.Services
+@inject PlanStore Plans
+@inject BotIntegrationService Integrations
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Planos</div>
+        <div class="page-sub">Tipos de venda: preço, franquia de contatos por mês, integrações incluídas e adicionais</div>
+    </div>
+    <AgilizButton Variant="primary" Small="true" OnClick="AddNew">+ Novo plano</AgilizButton>
+</div>
+
+<div class="wizard-content">
+    @if (_drafts.Any(d => d.Provisional))
+    {
+        <div class="form-card" style="border-color: var(--yellow); color: var(--yellow); margin-bottom: 16px; font-size: 13px;">
+            Planos marcados como provisórios têm valores de exemplo. Ajuste depois de decidir preço e franquia (pergunta para o Bruno).
+        </div>
+    }
+
+    @foreach (var d in _drafts)
+    {
+        <div class="form-card" style="margin-bottom: 16px;" @key="d.Key">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="font-weight: 600; color: var(--text);">@(string.IsNullOrWhiteSpace(d.Name) ? "Novo plano" : d.Name)</div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    @if (d.Provisional) { <AgilizBadge Text="provisório" ColorType="groq" /> }
+                    @if (!d.Active) { <span style="font-size: 11px; font-family: var(--mono); color: var(--text-3);">inativo</span> }
+                    @if (_usage.TryGetValue(d.Id, out var users) && users.Count > 0)
+                    {
+                        <span style="font-size: 12px; color: var(--text-3);">usado por @string.Join(", ", users)</span>
+                    }
+                </div>
+            </div>
+
+            <div class="plan-grid">
+                <label><span>Id</span><input class="plan-input" @bind="d.Id" disabled="@(!d.IsNew)" placeholder="ex.: essencial" /></label>
+                <label><span>Nome</span><input class="plan-input" @bind="d.Name" /></label>
+                <label><span>Preço mensal (R$)</span><input class="plan-input" type="number" min="0" step="0.01" @bind="d.MonthlyPriceBrl" /></label>
+                <label><span>Franquia (contatos/mês)</span><input class="plan-input" type="number" min="1" @bind="d.ConversationAllowance" /></label>
+                <label><span>Excedente (R$ por contato)</span><input class="plan-input" type="number" min="0" step="0.01" @bind="d.OveragePriceBrl" placeholder="vazio = só aviso" /></label>
+                <label><span>Máx. profissionais</span><input class="plan-input" type="number" min="1" @bind="d.MaxProfessionals" placeholder="vazio = sem limite" /></label>
+            </div>
+            <label style="display: grid; gap: 4px; margin-top: 10px;">
+                <span style="color: var(--text-2); font-size: 13px;">Descrição</span>
+                <input class="plan-input" @bind="d.Description" />
+            </label>
+
+            <div style="margin-top: 14px;">
+                <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Integrações (IA e WhatsApp vêm em todos)</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    @foreach (var def in Sellable)
+                    {
+                        var mode = d.ModeOf(def.Id);
+                        <tr>
+                            <td style="padding: 4px 0; color: var(--text);">@def.Name</td>
+                            <td style="padding: 4px 8px; width: 160px;">
+                                <select class="plan-input" value="@mode" @onchange="e => d.SetMode(def.Id, e.Value?.ToString() ?? PlanDraft.NotOffered)">
+                                    <option value="@PlanDraft.Included">Incluída</option>
+                                    <option value="@PlanDraft.AddOn">Adicional</option>
+                                    <option value="@PlanDraft.NotOffered">Não oferecida</option>
+                                </select>
+                            </td>
+                            <td style="padding: 4px 0; width: 160px;">
+                                @if (mode == PlanDraft.AddOn)
+                                {
+                                    <input class="plan-input" type="number" min="0" step="0.01" placeholder="R$/mês"
+                                           value="@d.AddOns.GetValueOrDefault(def.Id).ToString(CultureInfo.InvariantCulture)"
+                                           @onchange="e => d.AddOns[def.Id] = ParseMoney(e.Value)" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </table>
+            </div>
+
+            <div style="display: flex; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--text-2);">
+                <label style="display: flex; gap: 6px; align-items: center;"><input type="checkbox" @bind="d.Active" /> Ativo (aparece no quiz)</label>
+                <label style="display: flex; gap: 6px; align-items: center;"><input type="checkbox" @bind="d.Provisional" /> Valores provisórios</label>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <AgilizButton Variant="primary" Small="true" OnClick="() => SaveAsync(d)">Salvar</AgilizButton>
+                <AgilizButton Variant="danger" Small="true" OnClick="() => DeleteAsync(d)">@(d.IsNew ? "Descartar" : "Excluir")</AgilizButton>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+    .plan-grid label { display: grid; gap: 4px; }
+    .plan-grid span { color: var(--text-2); font-size: 13px; }
+    .plan-input {
+        width: 100%; background: var(--surface-2); border: 1px solid var(--border-2);
+        border-radius: var(--radius); color: var(--text); padding: 8px 10px; font-size: 13px;
+    }
+    .plan-input:disabled { opacity: 0.6; }
+</style>
+
+@code {
+    private List<PlanDraft> _drafts = [];
+    private Dictionary<string, List<string>> _usage = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>O que dá para incluir ou vender à parte: tudo que não é sempre ligado nem "em breve".</summary>
+    private static readonly IReadOnlyList<IntegrationDefinition> Sellable =
+        IntegrationCatalog.All.Where(i => !i.AlwaysOn && i.Status != IntegrationStatus.ComingSoon).ToList();
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        _drafts = Plans.List().Select(PlanDraft.From).ToList();
+        _usage = Integrations.Bots().Values
+            .Where(b => b.PlanId is not null)
+            .GroupBy(b => b.PlanId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(b => b.TenantId).ToList(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void AddNew() => _drafts.Add(new PlanDraft { IsNew = true, ConversationAllowance = 100, SortOrder = _drafts.Count + 1 });
+
+    private async Task SaveAsync(PlanDraft d)
+    {
+        var error = Plans.Save(d.ToPlan());
+        await JS.InvokeVoidAsync("toast", error ?? $"Plano {d.Name} salvo.", error is null ? "success" : "error");
+        if (error is null) Load();
+    }
+
+    private async Task DeleteAsync(PlanDraft d)
+    {
+        if (d.IsNew) { _drafts.Remove(d); return; }
+        if (_usage.TryGetValue(d.Id, out var users) && users.Count > 0)
+        {
+            await JS.InvokeVoidAsync("toast", $"Plano em uso por: {string.Join(", ", users)}.", "error");
+            return;
+        }
+        Plans.Delete(d.Id);
+        Load();
+    }
+
+    private static decimal ParseMoney(object? value) =>
+        decimal.TryParse(value?.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : 0m;
+
+    private sealed class PlanDraft
+    {
+        public const string Included = "included";
+        public const string AddOn = "addon";
+        public const string NotOffered = "none";
+
+        public Guid Key { get; } = Guid.NewGuid();
+        public bool IsNew { get; init; }
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal MonthlyPriceBrl { get; set; }
+        public int ConversationAllowance { get; set; }
+        public decimal? OveragePriceBrl { get; set; }
+        public int? MaxProfessionals { get; set; }
+        public bool Provisional { get; set; }
+        public bool Active { get; set; } = true;
+        public int SortOrder { get; set; }
+        public HashSet<string> IncludedSet { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, decimal> AddOns { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public string ModeOf(string id) => IncludedSet.Contains(id) ? Included : AddOns.ContainsKey(id) ? AddOn : NotOffered;
+
+        public void SetMode(string id, string mode)
+        {
+            IncludedSet.Remove(id);
+            if (mode != AddOn) AddOns.Remove(id);
+            if (mode == Included) IncludedSet.Add(id);
+            if (mode == AddOn && !AddOns.ContainsKey(id)) AddOns[id] = 0m;
+        }
+
+        public static PlanDraft From(Plan p)
+        {
+            var d = new PlanDraft
+            {
+                Id = p.Id, Name = p.Name, Description = p.Description, MonthlyPriceBrl = p.MonthlyPriceBrl,
+                ConversationAllowance = p.ConversationAllowance, OveragePriceBrl = p.OveragePriceBrl,
+                MaxProfessionals = p.MaxProfessionals, Provisional = p.Provisional, Active = p.Active, SortOrder = p.SortOrder
+            };
+            d.IncludedSet.UnionWith(p.IncludedIntegrations);
+            foreach (var (key, price) in p.AddOnPricesBrl) d.AddOns[key] = price;
+            return d;
+        }
+
+        public Plan ToPlan() => new()
+        {
+            Id = Id.Trim().ToLowerInvariant(), Name = Name, Description = string.IsNullOrWhiteSpace(Description) ? null : Description.Trim(),
+            MonthlyPriceBrl = MonthlyPriceBrl, ConversationAllowance = ConversationAllowance, OveragePriceBrl = OveragePriceBrl,
+            MaxProfessionals = MaxProfessionals, Provisional = Provisional, Active = Active, SortOrder = SortOrder,
+            IncludedIntegrations = IncludedSet.ToList(), AddOnPricesBrl = new Dictionary<string, decimal>(AddOns)
+        };
+    }
+}

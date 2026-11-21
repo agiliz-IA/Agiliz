@@ -21,6 +21,7 @@ public sealed record BotIntegrationsView
     public required string TenantId { get; init; }
     public BotType Type { get; init; }
     public decimal? MonthlyPriceBrl { get; init; }
+    public string? PlanId { get; init; }
     public IReadOnlyList<IntegrationState> Integrations { get; init; } = [];
     public IReadOnlyList<string> Warnings { get; init; } = [];
 }
@@ -33,6 +34,8 @@ public sealed record IntegrationUpdate
 }
 
 public sealed record PriceUpdate(decimal? MonthlyPriceBrl);
+
+public sealed record PlanAssignment(string? PlanId);
 
 public sealed record IntegrationUsage(IntegrationDefinition Definition, IReadOnlyList<string> Tenants);
 
@@ -82,6 +85,7 @@ public sealed class BotIntegrationService(IConfiguration configuration, RuntimeA
             TenantId = config.TenantId,
             Type = config.Type,
             MonthlyPriceBrl = config.MonthlyPriceBrl,
+            PlanId = config.PlanId,
             Integrations = states,
             Warnings = Warnings(config)
         };
@@ -131,6 +135,17 @@ public sealed class BotIntegrationService(IConfiguration configuration, RuntimeA
 
         var config = BotConfigLoader.Load(ConfigsDir, tenantId);
         return await SaveAsync(config with { MonthlyPriceBrl = monthlyPriceBrl }, ct);
+    }
+
+    /// <summary>Define o plano do bot (null = sem plano). O preço negociado, se houver, continua valendo.</summary>
+    public async Task<SaveOutcome> SetPlanAsync(string tenantId, string? planId, Agiliz.Core.Plans.PlanStore plans, CancellationToken ct = default)
+    {
+        if (!BotConfigLoader.Exists(ConfigsDir, tenantId)) return SaveOutcome.Fail("Bot não encontrado.");
+        planId = string.IsNullOrWhiteSpace(planId) ? null : planId.Trim();
+        if (planId is not null && plans.Get(planId) is null) return SaveOutcome.Fail("Plano não encontrado.");
+
+        var config = BotConfigLoader.Load(ConfigsDir, tenantId);
+        return await SaveAsync(config with { PlanId = planId }, ct);
     }
 
     /// <summary>Preço mensal de cada bot (para a margem no Financeiro).</summary>

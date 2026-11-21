@@ -65,6 +65,7 @@ public static class WhatsAppWebhook
         BotRunner runner,
         IMessageProvider messageSender,
         IAudioTranscriber transcriber,
+        IUsageRecorder usage,
         [FromServices] ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
@@ -120,6 +121,9 @@ public static class WhatsAppWebhook
         }
 
         logger.LogInformation("Mensagem Evolution de {From} para [{Tenant}]", senderNumber, tenant.Config.TenantId);
+
+        // Franquia do plano: conta o contato no mês (inclusive quando o bot está pausado no transbordo).
+        usage.RecordInbound(tenant.Config.TenantId, senderNumber);
 
         var reply = await runner.ProcessAsync(tenant, senderNumber, body, ct);
         if (reply is not null)

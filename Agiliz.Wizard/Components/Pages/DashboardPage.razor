@@ -3,6 +3,7 @@
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject NavigationManager NavManager
 @inject Agiliz.Wizard.Services.RuntimeApiClient Runtime
+@inject Agiliz.Wizard.Services.AllowanceService Allowance
 @inject IJSRuntime JS
 
 <div class="page-header">
@@ -17,6 +18,18 @@
         Novo Bot
     </AgilizButton>
 </div>
+
+@if (_allowance?.Alerts.Any() == true)
+{
+    <div style="margin: 16px 28px 0; padding: 12px 16px; border: 1px solid var(--yellow); border-radius: var(--radius-lg); color: var(--yellow); font-size: 13px;">
+        Franquia do mês:
+        @foreach (var a in _allowance.Alerts)
+        {
+            <span style="margin-left: 8px;">@a.TenantId @a.Contacts/@a.Allowance (@a.Ratio.ToString("P0"))@(a.Level == Agiliz.Core.Plans.AllowanceLevel.Exceeded ? " — excedida" : "")</span>
+        }
+        <span style="color: var(--text-3); margin-left: 8px;">O atendimento continua normalmente.</span>
+    </div>
+}
 
 <div class="bots-grid">
     @if (_bots == null)
@@ -42,6 +55,19 @@
                     <span class="bot-card-flows">@b.FlowCount flow@(b.FlowCount != 1 ? "s" : "")</span>
                 </div>
                 <div class="bot-card-number">@b.WhatsAppNumber</div>
+                @if (_allowance?.For(b.TenantId) is { } usage)
+                {
+                    <div style="font-size: 12px; margin-top: 6px; color: @(usage.Level switch { Agiliz.Core.Plans.AllowanceLevel.Exceeded => "var(--red)", Agiliz.Core.Plans.AllowanceLevel.Warning => "var(--yellow)", _ => "var(--text-3)" });">
+                        @if (usage.Level == Agiliz.Core.Plans.AllowanceLevel.NoPlan)
+                        {
+                            <span>sem plano · @usage.Contacts contatos no mês</span>
+                        }
+                        else
+                        {
+                            <span>@usage.PlanName · @usage.Contacts/@usage.Allowance contatos (@usage.Ratio.ToString("P0"))</span>
+                        }
+                    </div>
+                }
                 <div class="bot-card-actions">
                     <AgilizButton Variant="teal" Small="true" OnClick='() => NavManager.NavigateTo($"/test/{b.TenantId}")'>▶ Testar</AgilizButton>
                     <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo($"/edit/{b.TenantId}")'>Editar</AgilizButton>
@@ -56,11 +82,15 @@
 @code {
     private string _configsDir = "";
     private List<BotViewModel>? _bots;
+    private Agiliz.Wizard.Services.AllowanceReport? _allowance;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _configsDir = BotConfigLoader.ResolveConfigsDir(Config);
         LoadBots();
+        _allowance = await Allowance.GetAsync();
+        // Sem Runtime não sabemos o uso: melhor não mostrar "0 contatos".
+        if (_allowance.Error is not null) _allowance = null;
     }
 
     private void LoadBots()

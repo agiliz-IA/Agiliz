@@ -14,6 +14,9 @@ builder.Services.AddHttpClient();
 RuntimeApiClient.Register(builder.Services);
 builder.Services.AddSingleton<BotIntegrationService>();
 builder.Services.AddSingleton<CostSettings>();
+builder.Services.AddSingleton(new Agiliz.Core.Plans.PlanStore(configsDir));
+builder.Services.AddSingleton<AllowanceService>();
+builder.Services.AddSingleton<ProposalService>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 builder.Services.AddServerSideBlazor()
@@ -153,8 +156,15 @@ app.MapPost("/api/bots", async (HttpRequest req, RuntimeApiClient runtime) =>
                 Response = f.GetProperty("response").GetString() ?? ""
             });
 
+    // Sobrescrever um bot existente mantém integrações, plano, preço e guard rails.
+    var previous = BotConfigLoader.Exists(configsDir, tenantId) ? BotConfigLoader.Load(configsDir, tenantId) : null;
+
     var config = new BotConfig
     {
+        Integrations = previous?.Integrations,
+        PlanId = previous?.PlanId,
+        MonthlyPriceBrl = previous?.MonthlyPriceBrl,
+        GuardRails = previous?.GuardRails ?? new GuardRailSettings(),
         TenantId = tenantId,
         Type = botType,
         WhatsAppNumber = whatsappNumber,
@@ -280,6 +290,111 @@ app.MapPost("/api/bots/{id}/integrations/{integrationId}/test", async (string id
     }
     return Results.Json(await runtime.TestIntegrationAsync(integrationId, id, fields, ct), jsonOpts);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLANOS (tipos de venda)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.MapGet("/api/plans", (Agiliz.Core.Plans.PlanStore plans) => Results.Json(plans.List(), jsonOpts));
+
+app.MapPut("/api/plans/{id}", (string id, Agiliz.Core.Plans.Plan plan, Agiliz.Core.Plans.PlanStore plans) =>
+    plans.Save(plan with { Id = id }) is { } error
+        ? Results.BadRequest(new { error })
+        : Results.Json(plans.Get(id), jsonOpts));
+
+// DELETE /api/plans/{id} — recusa se algum bot usa o plano
+app.MapDelete("/api/plans/{id}", (string id, Agiliz.Core.Plans.PlanStore plans, BotIntegrationService integrations) =>
+{
+    if (plans.Get(id) is null) return Results.NotFound();
+    var users = integrations.Bots().Values.Where(b => string.Equals(b.PlanId, id, StringComparison.OrdinalIgnoreCase)).Select(b => b.TenantId).ToList();
+    if (users.Count > 0) return Results.Conflict(new { error = $"Plano em uso por: {string.Join(", ", users)}." });
+    plans.Delete(id);
+    return Results.NoContent();
+});
+
+// GET /api/usage — franquia de cada bot no mês (aviso a 80% e 100%)
+app.MapGet("/api/usage", async (string? month, AllowanceService allowance, CancellationToken ct) =>
+{
+    if (month is not null && !Agiliz.Core.Plans.UsageMonth.IsValid(month)) return Results.BadRequest(new { error = "month no formato yyyy-MM." });
+    var report = await allowance.GetAsync(month, ct);
+    return Results.Json(new
+    {
+        report.Month,
+        report.Error,
+        Bots = report.Bots.Select(b => new { b.TenantId, b.PlanName, b.Contacts, b.Allowance, b.Ratio, b.OverageContacts, b.OverageRevenueBrl, b.Level })
+    }, jsonOpts);
+});
+
+// PUT /api/bots/{id}/plan — plano do cliente
+app.MapPut("/api/bots/{id}/plan", async (string id, PlanAssignment body, Agiliz.Core.Plans.PlanStore plans, BotIntegrationService integrations, CancellationToken ct) =>
+{
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var outcome = await integrations.SetPlanAsync(id, body.PlanId, plans, ct);
+    return outcome.Ok ? Results.NoContent() : Results.BadRequest(new { error = outcome.Error });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// QUIZ DE VENDA E PROPOSTAS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.MapGet("/api/quiz", () => Results.Json(Agiliz.Core.Plans.QuizEngine.Questions, jsonOpts));
+
+// POST /api/quiz/evaluate — recomendação (regras fixas, sem IA)
+app.MapPost("/api/quiz/evaluate", (QuizAnswers body, ProposalService proposals) =>
+    Results.Json(ToJson(proposals.Evaluate(body.Answers)), jsonOpts));
+
+app.MapGet("/api/proposals", (ProposalService proposals) =>
+    Results.Json(new { stats = proposals.Stats(), proposals = proposals.List() }, jsonOpts));
+
+app.MapGet("/api/proposals/{id}", (string id, ProposalService proposals) =>
+    proposals.Get(id) is { } p ? Results.Json(p, jsonOpts) : Results.NotFound());
+
+app.MapPost("/api/proposals", (ProposalInput input, ProposalService proposals) =>
+{
+    var (p, error) = proposals.Save(null, input);
+    return error is null ? Results.Json(p, jsonOpts, statusCode: StatusCodes.Status201Created) : Results.BadRequest(new { error });
+});
+
+app.MapPut("/api/proposals/{id}", (string id, ProposalInput input, ProposalService proposals) =>
+{
+    if (proposals.Get(id) is null) return Results.NotFound();
+    var (p, error) = proposals.Save(id, input);
+    return error is null ? Results.Json(p, jsonOpts) : Results.BadRequest(new { error });
+});
+
+app.MapPost("/api/proposals/{id}/lost", (string id, LostReason body, ProposalService proposals) =>
+    proposals.MarkLost(id, body.Reason) is { } error ? Results.BadRequest(new { error }) : Results.NoContent());
+
+app.MapPost("/api/proposals/{id}/reopen", (string id, ProposalService proposals) =>
+    proposals.Reopen(id) is { } error ? Results.BadRequest(new { error }) : Results.NoContent());
+
+// POST /api/proposals/{id}/apply/{tenantId} — bot criado: aplica plano e integrações, marca convertida
+app.MapPost("/api/proposals/{id}/apply/{tenantId}", async (string id, string tenantId, ProposalService proposals, CancellationToken ct) =>
+{
+    var outcome = await proposals.ApplyToBotAsync(id, tenantId, ct);
+    return outcome.Ok
+        ? Results.Json(new { runtimeReloaded = outcome.RuntimeReloaded, runtimeError = outcome.RuntimeError }, jsonOpts)
+        : Results.BadRequest(new { error = outcome.Error });
+});
+
+static object ToJson(Agiliz.Core.Plans.QuizRecommendation r) => new
+{
+    r.Complete,
+    r.MissingAnswers,
+    r.BotType,
+    Plan = r.Plan is null ? null : new { r.Plan.Id, r.Plan.Name, r.Plan.MonthlyPriceBrl, r.Plan.ConversationAllowance, r.Plan.Provisional },
+    r.PlanReason,
+    r.Integrations,
+    r.LgpdConsentRequired,
+    r.EstimatedContacts,
+    r.EstimatedUsageCostBrl,
+    r.EstimatedFixedCostBrl,
+    r.EstimatedCostBrl,
+    r.MonthlyPriceBrl,
+    r.OverageRevenueBrl,
+    r.MarginBrl,
+    r.Notes
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TELEMETRY (Armazenamento Simples)

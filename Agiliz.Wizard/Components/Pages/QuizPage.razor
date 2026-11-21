@@ -1,0 +1,221 @@
+@page "/quiz"
+@page "/quiz/{ProposalId}"
+@using System.Globalization
+@using Agiliz.Core.Plans
+@using Agiliz.Wizard.Services
+@inject ProposalService Proposals
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Quiz de venda@(ProposalId is null ? "" : $" · {ProposalId}")</div>
+        <div class="page-sub">Responda junto com o cliente. A recomendação usa regras fixas e os planos cadastrados (sem IA).</div>
+    </div>
+    <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo("/proposals")'>Propostas</AgilizButton>
+</div>
+
+<div class="wizard-content">
+    @if (_converted)
+    {
+        <div class="form-card" style="border-color: var(--teal); color: var(--teal); margin-bottom: 16px; font-size: 13px;">
+            Esta proposta já virou cliente (bot @_tenantId). As respostas ficam só para consulta.
+        </div>
+    }
+
+    <div class="quiz-layout">
+        <div>
+            <div class="form-card" style="margin-bottom: 16px;">
+                <div class="quiz-grid">
+                    <label><span>Nome do negócio *</span><input class="quiz-input" @bind="_input.BusinessName" disabled="@_converted" /></label>
+                    <label><span>Contato</span><input class="quiz-input" @bind="_input.ContactName" disabled="@_converted" /></label>
+                    <label><span>Telefone do contato</span><input class="quiz-input" @bind="_input.ContactPhone" disabled="@_converted" /></label>
+                </div>
+                <label style="display: grid; gap: 4px; margin-top: 10px;">
+                    <span style="color: var(--text-2); font-size: 13px;">Observações</span>
+                    <input class="quiz-input" @bind="_input.Notes" disabled="@_converted" />
+                </label>
+            </div>
+
+            @foreach (var (q, index) in QuizEngine.Questions.Select((q, i) => (q, i)))
+            {
+                <div class="form-card" style="margin-bottom: 12px;" @key="q.Id">
+                    <div style="color: var(--text); font-weight: 600; font-size: 14px;">@(index + 1). @q.Text</div>
+                    <div style="color: var(--text-3); font-size: 12px; margin: 2px 0 10px;">Decide: @q.Decides</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        @foreach (var option in q.Options)
+                        {
+                            var selected = _answers.GetValueOrDefault(q.Id) == option.Id;
+                            <button type="button" class="quiz-option @(selected ? "selected" : "")" disabled="@_converted"
+                                    @onclick="() => Answer(q.Id, option.Id)">@option.Label</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div>
+            <div class="form-card quiz-result">
+                <div style="font-family: var(--mono); color: var(--text-2); font-size: 13px; margin-bottom: 12px;">recomendação</div>
+                @if (!_result.Complete)
+                {
+                    <div style="color: var(--text-3); font-size: 13px;">Faltam @_result.MissingAnswers.Count de @QuizEngine.Questions.Count respostas.</div>
+                }
+                else
+                {
+                    <div class="quiz-big">@(_result.Plan?.Name ?? "Sem plano")</div>
+                    <div style="color: var(--text-3); font-size: 12px; margin-bottom: 12px;">@_result.PlanReason</div>
+
+                    <div class="quiz-row"><span>Tipo de bot</span><b>@(_result.BotType == Agiliz.Core.Models.BotType.Scheduling ? "Agendamento" : "Atendimento")</b></div>
+                    <div class="quiz-row"><span>Preço/mês</span><b>@Brl(_result.MonthlyPriceBrl)</b></div>
+                    @if (_result.OverageRevenueBrl is > 0)
+                    {
+                        <div class="quiz-row"><span>Excedente estimado</span><b>@Brl(_result.OverageRevenueBrl)</b></div>
+                    }
+                    <div class="quiz-row"><span>Custo estimado/mês</span><b>@Brl(_result.EstimatedCostBrl)</b></div>
+                    <div class="quiz-row"><span>Margem estimada</span><b style="color: @(_result.MarginBrl < 0 ? "var(--red)" : "var(--teal)");">@Brl(_result.MarginBrl)</b></div>
+                    <div class="quiz-row"><span>Contatos/mês (estimativa)</span><b>@_result.EstimatedContacts</b></div>
+                    <div class="quiz-row"><span>Consentimento LGPD</span><b>@(_result.LgpdConsentRequired ? "sim" : "não")</b></div>
+
+                    <div style="color: var(--text-2); font-size: 13px; margin: 14px 0 6px;">Integrações</div>
+                    @foreach (var i in _result.Integrations)
+                    {
+                        <div style="font-size: 13px; margin-bottom: 6px;">
+                            <span style="color: var(--text);">@i.Name</span>
+                            <span style="color: @OfferColor(i.Offer); font-size: 12px;"> · @OfferLabel(i)</span>
+                            <div style="color: var(--text-3); font-size: 12px;">@i.Reason</div>
+                        </div>
+                    }
+
+                    @foreach (var note in _result.Notes)
+                    {
+                        <div style="color: var(--text-3); font-size: 12px; margin-top: 6px;">• @note</div>
+                    }
+                }
+
+                @if (!_converted)
+                {
+                    <div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
+                        <AgilizButton Variant="ghost" Small="true" OnClick="SaveAsync">Salvar proposta</AgilizButton>
+                        <AgilizButton Variant="primary" Small="true" Disabled="!_result.Complete" OnClick="CreateBotAsync">Criar bot</AgilizButton>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Colunas esticam até a altura total: assim o painel da recomendação tem onde "grudar" ao rolar. */
+    .quiz-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); gap: 16px; }
+    @@media (max-width: 900px) { .quiz-layout { grid-template-columns: 1fr; } }
+    .quiz-result { position: sticky; top: 16px; }
+    .quiz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .quiz-grid label { display: grid; gap: 4px; }
+    .quiz-grid span { color: var(--text-2); font-size: 13px; }
+    .quiz-input {
+        width: 100%; background: var(--surface-2); border: 1px solid var(--border-2);
+        border-radius: var(--radius); color: var(--text); padding: 8px 10px; font-size: 13px;
+    }
+    .quiz-option {
+        background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 99px;
+        color: var(--text-2); padding: 6px 12px; font-size: 13px; cursor: pointer;
+    }
+    .quiz-option.selected { border-color: var(--accent); color: var(--text); background: rgba(124,92,252,0.15); }
+    .quiz-option:disabled { cursor: default; }
+    .quiz-big { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .quiz-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); padding: 4px 0; border-bottom: 1px solid var(--border); }
+    .quiz-row b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+</style>
+
+@code {
+    [Parameter] public string? ProposalId { get; set; }
+
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private sealed class InputModel
+    {
+        public string BusinessName { get; set; } = "";
+        public string? ContactName { get; set; }
+        public string? ContactPhone { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    private readonly InputModel _input = new();
+    private Dictionary<string, string> _answers = [];
+    private QuizRecommendation _result = new();
+    private bool _converted;
+    private string? _tenantId;
+
+    protected override void OnParametersSet()
+    {
+        if (ProposalId is not null && Proposals.Get(ProposalId) is { } p)
+        {
+            _input.BusinessName = p.BusinessName;
+            _input.ContactName = p.ContactName;
+            _input.ContactPhone = p.ContactPhone;
+            _input.Notes = p.Notes;
+            _answers = new Dictionary<string, string>(p.Answers);
+            _converted = p.Status == ProposalStatus.Converted;
+            _tenantId = p.TenantId;
+        }
+        _result = Proposals.Evaluate(_answers);
+    }
+
+    private void Answer(string questionId, string optionId)
+    {
+        _answers[questionId] = optionId;
+        _result = Proposals.Evaluate(_answers);
+    }
+
+    private ProposalInput ToInput() => new()
+    {
+        BusinessName = _input.BusinessName,
+        ContactName = _input.ContactName,
+        ContactPhone = _input.ContactPhone,
+        Notes = _input.Notes,
+        Answers = _answers
+    };
+
+    private async Task<Proposal?> SaveCoreAsync()
+    {
+        var (proposal, error) = Proposals.Save(ProposalId, ToInput());
+        if (error is not null)
+        {
+            await JS.InvokeVoidAsync("toast", error, "error");
+            return null;
+        }
+        return proposal;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (await SaveCoreAsync() is not { } proposal) return;
+        await JS.InvokeVoidAsync("toast", "Proposta salva.", "success");
+        if (ProposalId is null) NavManager.NavigateTo($"/quiz/{proposal.Id}");
+    }
+
+    private async Task CreateBotAsync()
+    {
+        if (await SaveCoreAsync() is not { } proposal) return;
+        NavManager.NavigateTo($"/create?proposal={Uri.EscapeDataString(proposal.Id)}");
+    }
+
+    private static string Brl(decimal? value) => value is { } v ? v.ToString("C2", PtBr) : "—";
+
+    private static string OfferLabel(RecommendedIntegration i) => i.Offer switch
+    {
+        IntegrationOffer.Included => "incluída",
+        IntegrationOffer.AddOn => $"adicional {i.AddOnPriceBrl?.ToString("C2", PtBr)}",
+        IntegrationOffer.OnRequest => "sob consulta",
+        IntegrationOffer.ComingSoon => "em breve",
+        _ => "fora do plano"
+    };
+
+    private static string OfferColor(IntegrationOffer offer) => offer switch
+    {
+        IntegrationOffer.Included => "var(--teal)",
+        IntegrationOffer.AddOn => "var(--accent)",
+        _ => "var(--yellow)"
+    };
+}

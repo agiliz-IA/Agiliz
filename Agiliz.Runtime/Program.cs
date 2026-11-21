@@ -31,6 +31,11 @@ builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<BillingWriter>();
 builder.Services.AddSingleton<Agiliz.Core.Billing.ICostRecorder>(sp => sp.GetRequiredService<BillingWriter>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BillingWriter>());
+
+// Contatos por mês (franquia dos planos). Mesmo esquema: fila + gravação em segundo plano.
+builder.Services.AddSingleton<UsageRecorder>();
+builder.Services.AddSingleton<IUsageRecorder>(sp => sp.GetRequiredService<UsageRecorder>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UsageRecorder>());
 builder.Services.AddSingleton<BotRunner>();
 builder.Services.AddSingleton<IMessageProvider, EvolutionClient>();
 

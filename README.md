@@ -95,6 +95,12 @@ O catálogo fica em `Agiliz.Core/Integrations/IntegrationCatalog.cs` (Google Age
 
 O agente só recebe as ferramentas das integrações ligadas. Bots criados antes do catálogo continuam como estavam até alguém salvar a aba. Cada custo é gravado com a integração que o gerou; o Financeiro mostra uso, custos fixos (`Billing:FixedMonthlyBrl:<id>`) e margem em R$ (`Billing:UsdToBrl`).
 
+### Planos, franquia e quiz de venda
+- **Planos** (`configs/plans/`): preço, franquia de contatos por mês, integrações incluídas e adicionais. Na primeira vez o painel cria três planos provisórios (Essencial, Profissional, Clínica) para editar.
+- **Franquia**: o Runtime conta contatos diferentes por cliente no mês (tabela `ContactActivities`, fuso de Brasília). O painel avisa a 80% e 100% no Dashboard e no Financeiro; o atendimento nunca é bloqueado.
+- **Quiz de venda**: 10 perguntas com regras fixas (sem IA) recomendam tipo de bot, plano, integrações, custo estimado e margem. Regras em `Agiliz.Core/Plans/Quiz.cs`.
+- **Propostas** (`configs/proposals/`): quiz salvo para retomar e medir conversão. "Criar bot" leva as respostas ao meta-agente e, ao salvar, aplica plano, integrações e LGPD ao bot. Guardam nome e telefone do contato do lead.
+
 ### 2. Rodando o Painel de Controle (Wizard)
 Siga os guias de configuração do seu primeiro Bot diretamente do seu navegador:
 ```bash

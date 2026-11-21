@@ -38,6 +38,27 @@
             Integrações
         </button>
 
+        <button class="nav-item @(IsActive("plans") ? "active" : "")" @onclick='() => NavigateTo("plans")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="2" width="12" height="12" rx="2"></rect><path d="M5 6h6M5 9h6M5 12h3"></path>
+            </svg>
+            Planos
+        </button>
+
+        <button class="nav-item @(IsActive("quiz") ? "active" : "")" @onclick='() => NavigateTo("quiz")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="8" cy="8" r="6.5"></circle><path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.4M8 11.6v.1"></path>
+            </svg>
+            Quiz de venda
+        </button>
+
+        <button class="nav-item @(IsActive("proposals") ? "active" : "")" @onclick='() => NavigateTo("proposals")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 2h6l3 3v9H4z"></path><path d="M10 2v3h3M6 8h5M6 11h5"></path>
+            </svg>
+            Propostas
+        </button>
+
         <button class="nav-item @(IsActive("billing") ? "active" : "")" @onclick='() => NavigateTo("billing")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="2" y="3" width="12" height="10" rx="2" ry="2"></rect>

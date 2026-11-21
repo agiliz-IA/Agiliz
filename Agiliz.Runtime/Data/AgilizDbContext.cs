@@ -9,6 +9,7 @@ public class AgilizDbContext : DbContext
     public DbSet<Appointment> Appointments { get; set; } = null!;
     public DbSet<ConversationState> ConversationStates { get; set; } = null!;
     public DbSet<CostRecord> CostRecords { get; set; } = null!;
+    public DbSet<ContactActivity> ContactActivities { get; set; } = null!;
 
     public AgilizDbContext(DbContextOptions<AgilizDbContext> options) : base(options) { }
 
@@ -40,6 +41,14 @@ public class AgilizDbContext : DbContext
             cost.Property(c => c.IntegrationId).HasMaxLength(64);
             cost.HasIndex(c => new { c.TenantId, c.Timestamp });
             cost.HasIndex(c => c.Timestamp);
+        });
+
+        modelBuilder.Entity<ContactActivity>(usage =>
+        {
+            usage.HasKey(u => new { u.TenantId, u.Month, u.Phone });
+            usage.Property(u => u.TenantId).HasMaxLength(64);
+            usage.Property(u => u.Month).HasMaxLength(7);
+            usage.Property(u => u.Phone).HasMaxLength(32);
         });
     }
 }

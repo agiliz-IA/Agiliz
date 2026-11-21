@@ -7,6 +7,7 @@
 @using Agiliz.Core.Models
 @inject WizardSessionStore SessionStore
 @inject RuntimeApiClient Runtime
+@inject ProposalService Proposals
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
@@ -33,6 +34,13 @@
         @if (_step == 1)
         {
             <div class="step-body form-card">
+                @if (_proposal is not null)
+                {
+                    <div style="border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 14px; font-size: 13px; color: var(--text-2);">
+                        A partir da proposta <b style="color: var(--text);">@_proposal.BusinessName</b>@(_proposal.PlanName is null ? "" : $" · plano {_proposal.PlanName}").
+                        O assistente já recebe as respostas do quiz; ao salvar, o plano e as integrações recomendadas são aplicados ao bot.
+                    </div>
+                }
                 <AgilizInput Label="Tenant ID" Placeholder="exemplo_vendas" @bind-Value="_tenantId" />
                 <AgilizInput Label="Número WhatsApp" Placeholder="5511999999999" @bind-Value="_whatsAppNumber" />
                 <div style="margin-top: 16px;">
@@ -149,8 +157,22 @@
     private BotConfig? _extractedConfig;
     private string _jsonPreview = "";
 
+    [SupplyParameterFromQuery(Name = "proposal")] public string? ProposalQuery { get; set; }
+
+    private Agiliz.Core.Plans.Proposal? _proposal;
+    private string? _proposalContext;
+
     protected override void OnInitialized()
     {
+        if (!IsEdit && !string.IsNullOrWhiteSpace(ProposalQuery) && Proposals.Get(ProposalQuery) is { Status: not Agiliz.Core.Plans.ProposalStatus.Converted } proposal)
+        {
+            _proposal = proposal;
+            var recommendation = Proposals.Evaluate(proposal.Answers);
+            _botType = recommendation.BotType;
+            _tenantId = ProposalService.SuggestTenantId(proposal.BusinessName);
+            _proposalContext = Agiliz.Core.Plans.QuizEngine.DescribeForMetaAgent(proposal.Answers, recommendation, proposal.BusinessName);
+        }
+
         if (IsEdit)
         {
             _tenantId = TenantIdParam!;
@@ -184,7 +206,7 @@
         _isLoading = true;
         
         // Mocking the behavior of POST /api/sessions
-        var session = SessionStore.Create(_botType, IsEdit ? "edit" : null);
+        var session = SessionStore.Create(_botType, IsEdit ? "edit" : _proposalContext);
         _sessionId = session.Id.ToString();
         
         var greetingText = _botType == BotType.Scheduling
@@ -276,8 +298,15 @@
         
         var dir = BotConfigLoader.ResolveConfigsDir(Config);
         
+        // Edição pelo assistente reescreve prompt e flows; o que é gerido em outras telas fica.
+        var previous = BotConfigLoader.Exists(dir, _tenantId) ? BotConfigLoader.Load(dir, _tenantId) : null;
+
         var finalConfig = new BotConfig
         {
+            Integrations = previous?.Integrations,
+            PlanId = previous?.PlanId,
+            MonthlyPriceBrl = previous?.MonthlyPriceBrl,
+            GuardRails = previous?.GuardRails ?? new GuardRailSettings(),
             TenantId = _tenantId,
             Type = _extractedConfig.Type,
             WhatsAppNumber = _whatsAppNumber,
@@ -296,8 +325,21 @@
 
         BotConfigLoader.Save(dir, finalConfig);
 
-        // Ativa no Runtime sem reiniciar o servidor.
-        var reload = await Runtime.ReloadAsync();
+        // Veio de uma proposta: aplica plano, integrações e LGPD do quiz e marca a proposta como cliente.
+        RuntimeCallResult reload;
+        if (_proposal is not null)
+        {
+            var applied = await Proposals.ApplyToBotAsync(_proposal.Id, _tenantId);
+            if (!applied.Ok)
+                await JS.InvokeVoidAsync("toast", $"Bot salvo, mas a proposta não foi aplicada: {applied.Error}", "error");
+            reload = new RuntimeCallResult(applied.RuntimeReloaded, applied.RuntimeError ?? applied.Error);
+        }
+        else
+        {
+            // Ativa no Runtime sem reiniciar o servidor.
+            reload = await Runtime.ReloadAsync();
+        }
+
         if (reload.Ok)
             await JS.InvokeVoidAsync("toast", $"Bot {_tenantId} salvo e ativo no Runtime!", "success");
         else

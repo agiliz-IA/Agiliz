@@ -69,6 +69,34 @@ namespace Agiliz.Runtime.Migrations
                     b.ToTable("Appointments");
                 });
 
+            modelBuilder.Entity("Agiliz.Runtime.Data.Entities.ContactActivity", b =>
+                {
+                    b.Property<string>("TenantId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Month")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MessageCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("TenantId", "Month", "Phone");
+
+                    b.ToTable("ContactActivities");
+                });
+
             modelBuilder.Entity("Agiliz.Runtime.Data.Entities.ConversationState", b =>
                 {
                     b.Property<string>("Phone")

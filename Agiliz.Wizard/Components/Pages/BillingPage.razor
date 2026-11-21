@@ -7,6 +7,8 @@
 @inject Agiliz.Wizard.Services.RuntimeApiClient Runtime
 @inject Agiliz.Wizard.Services.BotIntegrationService Integrations
 @inject Agiliz.Wizard.Services.CostSettings Costs
+@inject Agiliz.Core.Plans.PlanStore Plans
+@inject Agiliz.Wizard.Services.AllowanceService Allowance
 
 <div class="page-header">
     <div>
@@ -64,6 +66,7 @@
                     <tr>
                         <th>Cliente</th>
                         <th style="text-align: right;">Preço/mês</th>
+                        <th style="text-align: right;">Franquia (mês atual)</th>
                         <th style="text-align: right;">Uso no período</th>
                         <th style="text-align: right;">Fixos/mês</th>
                         <th style="text-align: right;">Margem</th>
@@ -81,7 +84,27 @@
                                     <div style="color: var(--text-3); font-size: 12px; margin-top: 6px;">@row.Breakdown</div>
                                 }
                             </td>
-                            <td style="text-align: right; font-family: var(--mono);">@(row.PriceBrl is { } p ? Brl(p) : "—")</td>
+                            <td style="text-align: right; font-family: var(--mono);">
+                                @(row.PriceBrl is { } p ? Brl(p) : "—")
+                                @if (row.PlanName is not null)
+                                {
+                                    <div style="color: var(--text-3); font-size: 11px;">@row.PlanName</div>
+                                }
+                            </td>
+                            <td style="text-align: right; font-family: var(--mono); color: @(row.Allowance?.Level switch { Agiliz.Core.Plans.AllowanceLevel.Exceeded => "var(--red)", Agiliz.Core.Plans.AllowanceLevel.Warning => "var(--yellow)", _ => "var(--text)" });">
+                                @if (row.Allowance is { Level: not Agiliz.Core.Plans.AllowanceLevel.NoPlan } a)
+                                {
+                                    @($"{a.Contacts}/{a.Allowance}")
+                                    @if (a.OverageRevenueBrl is > 0)
+                                    {
+                                        <div style="font-size: 11px;">+@Brl(a.OverageRevenueBrl.Value) excedente</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span style="color: var(--text-3);">—</span>
+                                }
+                            </td>
                             <td style="text-align: right; font-family: var(--mono);">@(_error is null ? Brl(row.UsageBrl) : "—")</td>
                             <td style="text-align: right; font-family: var(--mono);">@(MonthlyView ? Brl(row.FixedBrl) : "—")</td>
                             <td style="text-align: right; font-family: var(--mono); color: @(margin is < 0 ? "var(--red)" : "var(--text)");">
@@ -101,8 +124,8 @@
         }
         <div style="color: var(--text-3); font-size: 12px; margin-top: 12px;">
             Câmbio R$ @Costs.UsdToBrl.ToString("0.00", PtBr) por US$@(Costs.ConfiguredUsdToBrl is null ? " (padrão; defina Billing:UsdToBrl)" : "").
-            Fixos = Billing:FixedMonthlyBrl por integração ligada. Margem = preço − uso − fixos; aparece com o preço definido
-            (aba Integrações do bot) e nos filtros mensais.
+            Fixos = Billing:FixedMonthlyBrl por integração ligada. Preço = negociado ou plano + adicionais ligados.
+            Margem = preço + excedente − uso − fixos; aparece com preço definido e nos filtros mensais.
         </div>
     </div>
 
@@ -188,13 +211,18 @@
     /// <summary>Preço e custos fixos são mensais: só comparam com o uso nos filtros de um mês.</summary>
     private bool MonthlyView => _period != "all";
 
-    private sealed record ClientRow(string TenantId, decimal? PriceBrl, decimal UsageBrl, decimal FixedBrl, string Breakdown);
+    private sealed record ClientRow(string TenantId, decimal? PriceBrl, decimal UsageBrl, decimal FixedBrl, string Breakdown,
+        string? PlanName = null, Agiliz.Core.Plans.AllowanceStatus? Allowance = null);
+
+    private Agiliz.Wizard.Services.AllowanceReport? _allowance;
 
     private static string Brl(decimal value) => value.ToString("C2", PtBr);
 
     /// <summary>Sem o billing do Runtime o custo de uso é desconhecido: margem não aparece (não é 100%).</summary>
     private decimal? Margin(ClientRow row) =>
-        _error is null && MonthlyView && row.PriceBrl is { } price && price > 0 ? price - row.UsageBrl - row.FixedBrl : null;
+        _error is null && MonthlyView && row.PriceBrl is { } price && price > 0
+            ? price + (row.Allowance?.OverageRevenueBrl ?? 0m) - row.UsageBrl - row.FixedBrl
+            : null;
 
     private void BuildRows()
     {
@@ -205,15 +233,18 @@
             .Select(id =>
             {
                 var bot = bots.GetValueOrDefault(id);
+                var plan = Plans.Get(bot?.PlanId);
                 var summary = tenants.GetValueOrDefault(id);
                 var breakdown = string.Join(" · ", (summary?.ByIntegration ?? [])
                     .Select(i => $"{IntegrationCatalog.Find(i.IntegrationId)?.Name ?? "sem integração"} {Brl(Costs.ToBrl(i.TotalUsd))}"));
                 return new ClientRow(
                     id,
-                    bot?.MonthlyPriceBrl,
+                    bot is null ? null : Agiliz.Core.Plans.BotPricing.MonthlyPriceBrl(bot, plan),
                     Costs.ToBrl(summary?.TotalUsd ?? 0m),
                     bot is null ? 0m : Costs.FixedMonthlyBrl(bot),
-                    breakdown);
+                    breakdown,
+                    plan?.Name,
+                    _allowance?.For(id));
             })
             .OrderByDescending(r => r.UsageBrl)
             .ThenBy(r => r.TenantId, StringComparer.OrdinalIgnoreCase)
@@ -242,6 +273,8 @@
                 _ => null
             };
             Report = await Runtime.GetBillingAsync(from, to: null);
+            _allowance ??= await Allowance.GetAsync();
+            if (_allowance.Error is not null) _allowance = null;
             BuildRows();
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)

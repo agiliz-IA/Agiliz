@@ -1,0 +1,137 @@
+@page "/proposals"
+@using System.Globalization
+@using Agiliz.Core.Plans
+@using Agiliz.Wizard.Services
+@inject ProposalService Proposals
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Propostas</div>
+        <div class="page-sub">Quizzes salvos na venda: retome, crie o bot ou marque como perdida</div>
+    </div>
+    <AgilizButton Variant="primary" Small="true" OnClick='() => NavManager.NavigateTo("/quiz")'>+ Novo quiz</AgilizButton>
+</div>
+
+<div class="wizard-content">
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+        @foreach (var (label, value, color) in Cards)
+        {
+            <div class="form-card" style="flex: 1; min-width: 150px; text-align: center;">
+                <div style="color: var(--text-3); font-size: 12px; font-weight: 600;">@label</div>
+                <div style="font-size: 26px; font-weight: 700; color: @color; margin-top: 6px;">@value</div>
+            </div>
+        }
+    </div>
+
+    <div class="form-card">
+        @if (_proposals.Count == 0)
+        {
+            <div style="color: var(--text-3); padding: 24px 0; text-align: center;">Nenhuma proposta ainda. Aplique o quiz numa conversa de venda.</div>
+        }
+        else
+        {
+            <table class="prop-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Negócio</th>
+                        <th>Plano</th>
+                        <th style="text-align: right;">Preço/mês</th>
+                        <th>Situação</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _proposals)
+                    {
+                        <tr @key="p.Id">
+                            <td>@p.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                            <td>
+                                <div style="color: var(--text);">@p.BusinessName</div>
+                                @if (p.ContactName is not null || p.ContactPhone is not null)
+                                {
+                                    <div style="color: var(--text-3); font-size: 12px;">@p.ContactName @p.ContactPhone</div>
+                                }
+                            </td>
+                            <td>@(p.PlanName ?? "—")</td>
+                            <td style="text-align: right; font-family: var(--mono);">@(p.MonthlyPriceBrl?.ToString("C2", PtBr) ?? "—")</td>
+                            <td>
+                                @switch (p.Status)
+                                {
+                                    case ProposalStatus.Converted:
+                                        <span style="cursor: pointer;" @onclick='() => NavManager.NavigateTo($"/bots/{p.TenantId}/integrations")'>
+                                            <AgilizBadge Text="@($"cliente · {p.TenantId}")" ColorType="flow" />
+                                        </span>
+                                        break;
+                                    case ProposalStatus.Lost:
+                                        <span style="color: var(--text-3); font-size: 12px;">perdida@(p.LostReason is null ? "" : $": {p.LostReason}")</span>
+                                        break;
+                                    default:
+                                        <AgilizBadge Text="aberta" ColorType="groq" />
+                                        break;
+                                }
+                            </td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <AgilizButton Variant="ghost" Small="true" OnClick='() => NavManager.NavigateTo($"/quiz/{p.Id}")'>Abrir</AgilizButton>
+                                @if (p.Status == ProposalStatus.Open)
+                                {
+                                    <AgilizButton Variant="danger" Small="true" OnClick="() => MarkLostAsync(p)">Perdida</AgilizButton>
+                                }
+                                else if (p.Status == ProposalStatus.Lost)
+                                {
+                                    <AgilizButton Variant="ghost" Small="true" OnClick="() => ReopenAsync(p)">Reabrir</AgilizButton>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<style>
+    .prop-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .prop-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); color: var(--text-3); font-size: 12px; text-transform: uppercase; }
+    .prop-table td { padding: 12px; border-bottom: 1px solid var(--border); color: var(--text-2); vertical-align: top; }
+</style>
+
+@code {
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
+    private IReadOnlyList<Proposal> _proposals = [];
+    private ProposalStats _stats = new(0, 0, 0, 0);
+
+    private IEnumerable<(string Label, string Value, string Color)> Cards =>
+    [
+        ("PROPOSTAS", _stats.Total.ToString(), "var(--text)"),
+        ("ABERTAS", _stats.Open.ToString(), "var(--yellow)"),
+        ("VIRARAM CLIENTE", _stats.Converted.ToString(), "var(--teal)"),
+        ("CONVERSÃO", _stats.ConversionRate?.ToString("P0", PtBr) ?? "—", "var(--accent)")
+    ];
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        _proposals = Proposals.List();
+        _stats = Proposals.Stats();
+    }
+
+    private async Task MarkLostAsync(Proposal p)
+    {
+        var reason = await JS.InvokeAsync<string?>("prompt", "Motivo (opcional):");
+        if (Proposals.MarkLost(p.Id, reason) is { } error)
+            await JS.InvokeVoidAsync("toast", error, "error");
+        Load();
+    }
+
+    private async Task ReopenAsync(Proposal p)
+    {
+        if (Proposals.Reopen(p.Id) is { } error)
+            await JS.InvokeVoidAsync("toast", error, "error");
+        Load();
+    }
+}

@@ -2,6 +2,7 @@
 @using Agiliz.Core.Integrations
 @using Agiliz.Wizard.Services
 @inject BotIntegrationService Integrations
+@inject Agiliz.Core.Plans.PlanStore Plans
 @inject RuntimeApiClient Runtime
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
@@ -26,13 +27,35 @@
             <div class="form-card" style="border-color: var(--yellow); color: var(--yellow); margin-bottom: 16px;">@warning</div>
         }
 
-        <div class="form-card" style="margin-bottom: 20px; display: flex; align-items: end; gap: 12px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 220px;">
-                <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Preço mensal cobrado do cliente (R$)</div>
-                <input class="integration-input" type="number" min="0" step="0.01" placeholder="ex.: 197,00" @bind="_price" />
-                <div style="color: var(--text-3); font-size: 12px; margin-top: 4px;">Usado para a margem no Financeiro. Na fase 2 vem do plano.</div>
+        <div class="form-card" style="margin-bottom: 20px;">
+            <div style="display: flex; align-items: end; gap: 12px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 220px;">
+                    <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Plano</div>
+                    <select class="integration-input" value="@(_planId ?? "")" @onchange="e => _planId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString()">
+                        <option value="">Sem plano</option>
+                        @foreach (var p in _plans)
+                        {
+                            <option value="@p.Id">@p.Name — @p.MonthlyPriceBrl.ToString("C0", PtBr)/mês · @p.ConversationAllowance contatos@(p.Active ? "" : " (inativo)")</option>
+                        }
+                    </select>
+                </div>
+                <AgilizButton Variant="primary" Small="true" OnClick="SavePlanAsync">Salvar plano</AgilizButton>
             </div>
-            <AgilizButton Variant="primary" Small="true" OnClick="SavePriceAsync">Salvar preço</AgilizButton>
+            <div style="display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 14px;">
+                <div style="flex: 1; min-width: 220px;">
+                    <div style="color: var(--text-2); font-size: 13px; margin-bottom: 6px;">Preço negociado (R$/mês, opcional)</div>
+                    <input class="integration-input" type="number" min="0" step="0.01" placeholder="vazio = preço do plano + adicionais" @bind="_price" />
+                </div>
+                <AgilizButton Variant="ghost" Small="true" OnClick="SavePriceAsync">Salvar preço</AgilizButton>
+            </div>
+            <div style="color: var(--text-3); font-size: 12px; margin-top: 8px;">
+                Preço que vale hoje: @(_effectivePrice is { } ep ? ep.ToString("C2", PtBr) : "—")
+                @(_view.MonthlyPriceBrl is not null ? "(negociado)" : _plan is not null ? "(plano + adicionais ligados)" : "")
+            </div>
+            @foreach (var outside in _outsidePlan)
+            {
+                <div style="color: var(--yellow); font-size: 12px; margin-top: 4px;">@outside.Name está ligada mas não faz parte do plano nem tem preço de adicional.</div>
+            }
         </div>
 
         @foreach (var state in _view.Integrations.OrderBy(i => i.Definition.Status).ThenBy(i => i.Definition.AlwaysOn ? 0 : 1))
@@ -67,6 +90,12 @@
                 </div>
                 <div style="color: var(--text-2); font-size: 13px; margin-top: 6px;">@def.Description</div>
                 <div style="color: var(--text-3); font-size: 12px; margin-top: 4px;">Custo: @def.CostNote</div>
+                @if (_plan is not null && !def.AlwaysOn && editable)
+                {
+                    <div style="font-size: 12px; margin-top: 4px; color: var(--text-2);">
+                        @(_plan.Includes(def.Id) ? $"Incluída no plano {_plan.Name}." : _plan.AddOnPrice(def.Id) is { } addOn ? $"Adicional: {addOn.ToString("C2", PtBr)}/mês." : $"Não faz parte do plano {_plan.Name}.")
+                    </div>
+                }
 
                 @if (state.BlockedReason is not null && editable)
                 {
@@ -159,7 +188,14 @@
 @code {
     [Parameter] public string TenantId { get; set; } = "";
 
+    private static readonly System.Globalization.CultureInfo PtBr = new("pt-BR");
+
     private BotIntegrationsView? _view;
+    private IReadOnlyList<Agiliz.Core.Plans.Plan> _plans = [];
+    private Agiliz.Core.Plans.Plan? _plan;
+    private string? _planId;
+    private decimal? _effectivePrice;
+    private IReadOnlyList<IntegrationDefinition> _outsidePlan = [];
     private IntegrationServerInfo? _info;
     private decimal? _price;
     private readonly Dictionary<string, Draft> _drafts = new(StringComparer.OrdinalIgnoreCase);
@@ -184,6 +220,12 @@
         _view = Integrations.Get(TenantId);
         if (_view is null) return;
         _price = _view.MonthlyPriceBrl;
+        _plans = Plans.List();
+        _plan = Plans.Get(_view.PlanId);
+        _planId = _view.PlanId;
+        var config = Integrations.Bots().GetValueOrDefault(TenantId);
+        _effectivePrice = config is null ? null : Agiliz.Core.Plans.BotPricing.MonthlyPriceBrl(config, _plan);
+        _outsidePlan = config is not null && _plan is not null ? Agiliz.Core.Plans.BotPricing.OutsidePlan(config, _plan) : [];
 
         foreach (var state in _view.Integrations)
         {
@@ -247,6 +289,13 @@
         {
             draft.Busy = false;
         }
+    }
+
+    private async Task SavePlanAsync()
+    {
+        var outcome = await Integrations.SetPlanAsync(TenantId, _planId, Plans);
+        await JS.InvokeVoidAsync("toast", outcome.Ok ? "Plano salvo." : outcome.Error, outcome.Ok ? "success" : "error");
+        Load();
     }
 
     private async Task SavePriceAsync()
