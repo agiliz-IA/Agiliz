@@ -103,6 +103,8 @@ public sealed class TenantRegistry
         _byNumber.Values.FirstOrDefault(e => string.Equals(e.Config.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
 
     public int Count => _byNumber.Count;
+
+    public IReadOnlyList<TenantEntry> All() => _byNumber.Values.ToList();
 }
 
 public sealed record TenantEntry(BotConfig Config, ILlmClient LlmClient);

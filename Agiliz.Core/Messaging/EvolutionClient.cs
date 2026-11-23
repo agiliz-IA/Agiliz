@@ -102,6 +102,41 @@ public sealed class EvolutionClient : IMessageProvider
         return new MediaContent(Convert.FromBase64String(media.Base64), media.Mimetype ?? "audio/ogg");
     }
 
+    /// <summary>GET /instance/connect/{instance}?number=… → pairingCode (8 caracteres) para digitar no WhatsApp.</summary>
+    public async Task<WhatsAppPairingResult> RequestPairingCodeAsync(string instance, string phoneNumber, CancellationToken ct = default)
+    {
+        var number = NormalizeNumber(phoneNumber);
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.GetAsync($"{_apiUrl}/instance/connect/{Uri.EscapeDataString(instance)}?number={number}", ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new(false, null, $"Evolution fora do ar: {ex.Message}");
+        }
+
+        using (response)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return new(false, null, "Este número ainda não foi preparado no servidor. Fale com a equipe Agiliz.");
+            if (!response.IsSuccessStatusCode)
+                return new(false, null, $"A Evolution respondeu HTTP {(int)response.StatusCode}.");
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+                if (doc.RootElement.TryGetProperty("pairingCode", out var code) && code.GetString() is { Length: > 0 } pairing)
+                    return new(true, pairing, "Digite o código no WhatsApp do número do bot.");
+                if (doc.RootElement.TryGetProperty("instance", out var inst) && inst.TryGetProperty("state", out var state) && state.GetString() == "open")
+                    return new(false, null, "Este número já está conectado.");
+            }
+            catch (System.Text.Json.JsonException) { }
+
+            return new(false, null, "A Evolution não devolveu código de pareamento. Tente de novo em alguns segundos.");
+        }
+    }
+
     /// <summary>GET /instance/connectionState/{instance} → "open", "connecting" ou "close".</summary>
     public async Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default)
     {

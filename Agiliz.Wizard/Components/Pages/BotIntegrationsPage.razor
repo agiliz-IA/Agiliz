@@ -58,6 +58,33 @@
             }
         </div>
 
+        <div class="form-card" style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="font-weight: 600; color: var(--text);">Portal do cliente</div>
+                <a href="/portal/" target="_blank" rel="noopener" style="font-size: 13px; color: var(--accent);">Abrir portal ↗</a>
+            </div>
+            <div style="color: var(--text-3); font-size: 12px; margin-top: 4px;">
+                Quem está aqui entra no portal com um código enviado pelo WhatsApp (PC ou celular) e só vê este bot.
+            </div>
+            <div style="display: grid; gap: 10px; margin-top: 12px;">
+                <label style="display: grid; gap: 4px;">
+                    <span style="color: var(--text-2); font-size: 13px;">Nome no portal</span>
+                    <input class="integration-input" @bind="_displayName" placeholder="ex.: Clínica Sorriso" />
+                </label>
+                <label style="display: grid; gap: 4px;">
+                    <span style="color: var(--text-2); font-size: 13px;">WhatsApp com acesso (um por linha)</span>
+                    <textarea class="integration-input" rows="3" @bind="_portalPhones" placeholder="21 99999-9999"></textarea>
+                </label>
+                <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2);">
+                    <input type="checkbox" @bind="_isDemo" />
+                    Bot de demonstração (limpo toda madrugada; telefones mascarados no portal)
+                </label>
+            </div>
+            <div style="margin-top: 12px;">
+                <AgilizButton Variant="primary" Small="true" OnClick="SavePortalAsync">Salvar portal</AgilizButton>
+            </div>
+        </div>
+
         @foreach (var state in _view.Integrations.OrderBy(i => i.Definition.Status).ThenBy(i => i.Definition.AlwaysOn ? 0 : 1))
         {
             var def = state.Definition;
@@ -195,6 +222,9 @@
     private Agiliz.Core.Plans.Plan? _plan;
     private string? _planId;
     private decimal? _effectivePrice;
+    private string? _displayName;
+    private string _portalPhones = "";
+    private bool _isDemo;
     private IReadOnlyList<IntegrationDefinition> _outsidePlan = [];
     private IntegrationServerInfo? _info;
     private decimal? _price;
@@ -225,6 +255,9 @@
         _planId = _view.PlanId;
         var config = Integrations.Bots().GetValueOrDefault(TenantId);
         _effectivePrice = config is null ? null : Agiliz.Core.Plans.BotPricing.MonthlyPriceBrl(config, _plan);
+        _displayName = config?.DisplayName;
+        _portalPhones = string.Join("\n", config?.PortalPhones ?? []);
+        _isDemo = config?.IsDemo ?? false;
         _outsidePlan = config is not null && _plan is not null ? Agiliz.Core.Plans.BotPricing.OutsidePlan(config, _plan) : [];
 
         foreach (var state in _view.Integrations)
@@ -289,6 +322,14 @@
         {
             draft.Busy = false;
         }
+    }
+
+    private async Task SavePortalAsync()
+    {
+        var phones = _portalPhones.Split(['\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var outcome = await Integrations.SetPortalSettingsAsync(TenantId, _displayName, phones, _isDemo);
+        await JS.InvokeVoidAsync("toast", outcome.Ok ? "Portal salvo." : outcome.Error, outcome.Ok ? "success" : "error");
+        Load();
     }
 
     private async Task SavePlanAsync()

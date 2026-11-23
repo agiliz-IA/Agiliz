@@ -35,6 +35,18 @@ public sealed record BotConfig
 
     /// <summary>Preço mensal negociado (R$). Quando vazio, vale o preço do plano mais os adicionais ligados.</summary>
     public decimal? MonthlyPriceBrl { get; init; }
+
+    /// <summary>Nome do negócio no portal do cliente (ex.: "Clínica Sorriso"). Vazio = TenantId.</summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>Telefones que entram no portal do cliente com código pelo WhatsApp (só dígitos, com DDI).</summary>
+    public List<string> PortalPhones { get; init; } = [];
+
+    /// <summary>Bot pausado pelo cliente no portal: as mensagens ficam registradas, mas o bot não responde.</summary>
+    public bool Paused { get; init; }
+
+    /// <summary>Bot de demonstração: limpo toda madrugada e com telefones mascarados no portal.</summary>
+    public bool IsDemo { get; init; }
 }
 
 public sealed class IntegrationSettings

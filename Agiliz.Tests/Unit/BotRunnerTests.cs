@@ -98,6 +98,19 @@ public sealed class BotRunnerTests
         _costs.Entries.Should().Contain(e => e.Type == CostType.ToolExecution && e.IntegrationId == Agiliz.Core.Integrations.IntegrationCatalog.Email && e.AmountUsd == 0.02m);
     }
 
+    [Fact]
+    public async Task ProcessAsync_WhenBotIsPausedByClient_RecordsButDoesNotReply()
+    {
+        _llm.Returns("não deveria responder");
+        var config = TestFixtures.DefaultConfig() with { Paused = true };
+
+        var result = await _runner.ProcessAsync(Tenant(config), "+5521999", "oi, tem horário?");
+
+        result.Should().BeNull();
+        _llm.CallCount.Should().Be(0);
+        _sessions.GetHistory(config.TenantId, "+5521999").Messages.Should().ContainSingle(m => m.Content == "oi, tem horário?");
+    }
+
     private TenantEntry Tenant(BotConfig config) => new(config, _llm);
 
     // ─── Flow matching ────────────────────────────────────────────────────────

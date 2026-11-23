@@ -165,7 +165,7 @@ public sealed class WizardPlansAndProposalsTests : IDisposable
         });
         using var factory = BuildFactory();
         var client = factory.CreateClient();
-        var created = await client.PostAsJsonAsync("/api/proposals", new { businessName = "Clínica Sorriso", answers = DentalAnswers });
+        var created = await client.PostAsJsonAsync("/api/proposals", new { businessName = "Clínica Sorriso", contactPhone = "21 98765-4321", answers = DentalAnswers });
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
 
         var applied = await client.PostAsync($"/api/proposals/{id}/apply/clinica-sorriso", null);
@@ -177,6 +177,8 @@ public sealed class WizardPlansAndProposalsTests : IDisposable
         BotIntegrations.IsEnabled(config, IntegrationCatalog.Audio).Should().BeTrue();
         BotIntegrations.IsEnabled(config, IntegrationCatalog.Email).Should().BeFalse("o quiz não pediu e-mail");
         BotIntegrations.CalendarId(config).Should().Be("agenda@gmail.com");
+        config.PortalPhones.Should().ContainSingle("o contato da proposta entra no portal").Which.Should().Be("5521987654321");
+        config.DisplayName.Should().Be("Clínica Sorriso");
 
         var list = await client.GetFromJsonAsync<JsonElement>("/api/proposals");
         list.GetProperty("stats").GetProperty("converted").GetInt32().Should().Be(1);

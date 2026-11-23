@@ -113,6 +113,38 @@ public sealed class SessionStore
         PersistPause(tenantId, userPhone, isPaused: false);
     }
 
+    /// <summary>Histórico recente em memória (últimas mensagens) e se a conversa está com um atendente.</summary>
+    public (IReadOnlyList<ConversationMessage> Messages, bool IsPaused) GetHistory(string tenantId, string userPhone) =>
+        _sessions.TryGetValue(BuildKey(tenantId, userPhone), out var session)
+            ? (session.Messages.ToList(), session.IsPaused)
+            : ([], IsPausedPersisted(tenantId, userPhone));
+
+    /// <summary>Resposta do atendente humano: entra no histórico para o bot ter contexto quando voltar.</summary>
+    public void AddHumanReply(string tenantId, string userPhone, string body)
+    {
+        var key = BuildKey(tenantId, userPhone);
+        _sessions.AddOrUpdate(key,
+            _ => new Session([ConversationMessage.Assistant(body)]) { IsPaused = true },
+            (_, existing) =>
+            {
+                existing.Messages.Add(ConversationMessage.Assistant(body));
+                while (existing.Messages.Count > MaxMessagesPerSession)
+                    existing.Messages.RemoveRange(0, 2);
+                existing.LastActivity = DateTimeOffset.UtcNow;
+                return existing;
+            });
+    }
+
+    /// <summary>Apaga as conversas em memória de um cliente (limpeza da demonstração).</summary>
+    public int ClearTenant(string tenantId)
+    {
+        var prefix = $"{tenantId.Trim().ToLowerInvariant()}::";
+        var removed = 0;
+        foreach (var key in _sessions.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)))
+            if (_sessions.TryRemove(key, out _)) removed++;
+        return removed;
+    }
+
     /// <summary>
     /// Remove sessões inativas. Deve ser chamado periodicamente (ex: hosted service ou timer).
     /// </summary>

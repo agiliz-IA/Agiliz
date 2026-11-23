@@ -67,6 +67,10 @@ builder.Services.AddSingleton<ITool, Agiliz.Runtime.Tools.PausarBotTool>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddSingleton<IntegrationTester>();
 
+// Bots de demonstração (IsDemo) são limpos toda madrugada e sob demanda pelo portal.
+builder.Services.AddSingleton<DemoResetService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DemoResetService>());
+
 // ─── Build ────────────────────────────────────────────────────────────────────
 var app = builder.Build();
 
@@ -104,6 +108,7 @@ if (app.Configuration.GetValue("Database:AutoMigrate", false))
 // ─── Endpoints ────────────────────────────────────────────────────────────────
 WhatsAppWebhook.Map(app);
 AdminEndpoints.Map(app);
+TenantEndpoints.Map(app);
 
 app.MapGet("/health", () => Results.Ok(new
 {

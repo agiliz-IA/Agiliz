@@ -123,11 +123,19 @@ public sealed class ProposalService(IConfiguration configuration, PlanStore plan
         }
 
         var planId = plans.Get(proposal.PlanId) is not null ? proposal.PlanId : recommendation.Plan?.Id;
+
+        // O contato da proposta passa a entrar no portal do cliente (código pelo WhatsApp).
+        var portalPhones = config.PortalPhones.ToList();
+        var contact = Agiliz.Wizard.Portal.PortalAuthService.NormalizePhone(proposal.ContactPhone);
+        if (contact.Length is 12 or 13 && !portalPhones.Contains(contact)) portalPhones.Add(contact);
+
         BotConfigLoader.Save(ConfigsDir, config with
         {
             Integrations = integrations,
             PlanId = planId,
-            LgpdConsentRequired = config.LgpdConsentRequired || recommendation.LgpdConsentRequired
+            LgpdConsentRequired = config.LgpdConsentRequired || recommendation.LgpdConsentRequired,
+            DisplayName = config.DisplayName ?? proposal.BusinessName,
+            PortalPhones = portalPhones
         });
 
         Files.Save(proposal.Id, proposal with

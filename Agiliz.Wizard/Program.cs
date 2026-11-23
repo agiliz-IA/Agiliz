@@ -3,6 +3,9 @@ using Agiliz.Core.Config;
 using Agiliz.Core.LLM;
 using Agiliz.Core.Models;
 using Agiliz.Wizard.Services;
+using Agiliz.Wizard.Portal;
+using Microsoft.AspNetCore.DataProtection;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +20,28 @@ builder.Services.AddSingleton<CostSettings>();
 builder.Services.AddSingleton(new Agiliz.Core.Plans.PlanStore(configsDir));
 builder.Services.AddSingleton<AllowanceService>();
 builder.Services.AddSingleton<ProposalService>();
+builder.Services.AddSingleton<DemoBotService>();
+
+// ─── Portal do cliente (/portal): login por código no WhatsApp, fora do Basic Auth ───
+// Chaves em configs/keys para a sessão do portal sobreviver a reinícios (configs/ não vai para o git).
+builder.Services.AddDataProtection()
+    .SetApplicationName("Agiliz.Wizard")
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(configsDir, "keys")));
+builder.Services.AddSingleton<PortalAuthService>();
+// Enums como texto nas respostas (o portal compara "Scheduling", não 1).
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(PortalEndpoints.LoginRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "local",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = builder.Configuration.GetValue("Portal:LoginRateLimitPerMinute", 10),
+            Window = TimeSpan.FromMinutes(1)
+        }));
+});
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 builder.Services.AddServerSideBlazor()
@@ -36,6 +61,20 @@ if (app.Environment.IsDevelopment())
 
 app.Use(async (context, next) =>
 {
+    // Portal do cliente: login próprio (código no WhatsApp). Nunca passa pelo Basic Auth do admin
+    // e é uma página estática + API, sem circuito Blazor (que daria acesso às telas do admin).
+    if (context.Request.Path.StartsWithSegments("/portal"))
+    {
+        var headers = context.Response.Headers;
+        headers["X-Frame-Options"] = "DENY";
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["Referrer-Policy"] = "same-origin";
+        headers["Content-Security-Policy"] =
+            "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+        await next();
+        return;
+    }
+
     var expectedPassword = app.Configuration["Wizard:AdminPassword"];
     if (string.IsNullOrWhiteSpace(expectedPassword))
     {
@@ -63,8 +102,21 @@ app.Use(async (context, next) =>
     context.Response.Headers.WWWAuthenticate = "Basic realm=\"Agiliz Wizard\"";
     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
 });
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // Portal: o navegador sempre revalida (ETag), então uma atualização chega na hora para o cliente.
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.Context.Request.Path.StartsWithSegments("/portal"))
+            ctx.Context.Response.Headers.CacheControl = "no-cache";
+    }
+});
+app.UseRateLimiter();
 app.UseAntiforgery();
+
+// /portal e /portal/ são a mesma rota para o roteamento; a página usa caminhos absolutos.
+app.MapGet("/portal", () => Results.File(Path.Combine(app.Environment.WebRootPath, "portal", "index.html"), "text/html; charset=utf-8"));
+PortalEndpoints.Map(app);
 
 // ─── Session purge timer ──────────────────────────────────────────────────────
 var store = app.Services.GetRequiredService<WizardSessionStore>();
@@ -330,6 +382,23 @@ app.MapPut("/api/bots/{id}/plan", async (string id, PlanAssignment body, Agiliz.
 {
     if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
     var outcome = await integrations.SetPlanAsync(id, body.PlanId, plans, ct);
+    return outcome.Ok ? Results.NoContent() : Results.BadRequest(new { error = outcome.Error });
+});
+
+// POST /api/demo-bot — cria o bot de demonstração (clinica-demo) para o vendedor
+app.MapPost("/api/demo-bot", async (DemoBotRequest body, DemoBotService demo, CancellationToken ct) =>
+{
+    var outcome = await demo.CreateAsync(body.WhatsAppNumber ?? "", body.SellerPhones ?? [], ct);
+    return outcome.Ok
+        ? Results.Json(new { tenantId = DemoBotService.TenantId, runtimeReloaded = outcome.RuntimeReloaded }, jsonOpts, statusCode: StatusCodes.Status201Created)
+        : Results.BadRequest(new { error = outcome.Error });
+});
+
+// PUT /api/bots/{id}/portal — nome no portal, telefones com acesso e se é demonstração
+app.MapPut("/api/bots/{id}/portal", async (string id, PortalSettings body, BotIntegrationService integrations, CancellationToken ct) =>
+{
+    if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
+    var outcome = await integrations.SetPortalSettingsAsync(id, body.DisplayName, body.PortalPhones ?? [], body.IsDemo, ct);
     return outcome.Ok ? Results.NoContent() : Results.BadRequest(new { error = outcome.Error });
 });
 

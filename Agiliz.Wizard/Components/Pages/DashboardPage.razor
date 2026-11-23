@@ -4,6 +4,7 @@
 @inject NavigationManager NavManager
 @inject Agiliz.Wizard.Services.RuntimeApiClient Runtime
 @inject Agiliz.Wizard.Services.AllowanceService Allowance
+@inject Agiliz.Wizard.Services.DemoBotService Demo
 @inject IJSRuntime JS
 
 <div class="page-header">
@@ -11,12 +12,18 @@
         <div class="page-title">bots ativos</div>
         <div class="page-sub">gerencie e teste seus bots WhatsApp</div>
     </div>
+    <div style="display: flex; gap: 8px;">
+    @if (!Demo.Exists)
+    {
+        <AgilizButton Variant="ghost" OnClick="CreateDemoAsync">Criar bot de demonstração</AgilizButton>
+    }
     <AgilizButton Variant="primary" OnClick='() => NavManager.NavigateTo("/create")'>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" />
         </svg>
         Novo Bot
     </AgilizButton>
+    </div>
 </div>
 
 @if (_allowance?.Alerts.Any() == true)
@@ -108,6 +115,24 @@
                 return new BotViewModel(id, "erro", "-", 0);
             }
         }).ToList();
+    }
+
+    private async Task CreateDemoAsync()
+    {
+        var number = await JS.InvokeAsync<string?>("prompt", "Número do chip da demonstração (com DDD):");
+        if (string.IsNullOrWhiteSpace(number)) return;
+        var sellers = await JS.InvokeAsync<string?>("prompt", "WhatsApp dos vendedores que entram no portal (separe por vírgula):");
+        if (string.IsNullOrWhiteSpace(sellers)) return;
+
+        var outcome = await Demo.CreateAsync(number, sellers.Split(',', ';'));
+        if (!outcome.Ok)
+        {
+            await JS.InvokeVoidAsync("toast", outcome.Error, "error");
+            return;
+        }
+        LoadBots();
+        await JS.InvokeVoidAsync("toast", "Bot de demonstração criado. Falta conectar o número e informar o ID da agenda de exemplo.", "success");
+        NavManager.NavigateTo($"/bots/{Agiliz.Wizard.Services.DemoBotService.TenantId}/integrations");
     }
 
     private async Task DeleteBot(string id)

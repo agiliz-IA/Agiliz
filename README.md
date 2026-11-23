@@ -101,6 +101,12 @@ O agente só recebe as ferramentas das integrações ligadas. Bots criados antes
 - **Quiz de venda**: 10 perguntas com regras fixas (sem IA) recomendam tipo de bot, plano, integrações, custo estimado e margem. Regras em `Agiliz.Core/Plans/Quiz.cs`.
 - **Propostas** (`configs/proposals/`): quiz salvo para retomar e medir conversão. "Criar bot" leva as respostas ao meta-agente e, ao salvar, aplica plano, integrações e LGPD ao bot. Guardam nome e telefone do contato do lead.
 
+### Portal do cliente e demonstração
+- **Portal** (`/portal` no painel): página para o cliente acompanhar o bot no PC ou no celular — início com uso da franquia, conversas (assumir, responder, devolver ao bot), agenda do dia, pausar o bot, integrações do plano e conexão do número por código de pareamento (sem QR code).
+- **Acesso**: o admin cadastra os WhatsApp com acesso na aba Integrações do bot (card "Portal do cliente"). O cliente entra com um código de 6 dígitos enviado pelo WhatsApp; a sessão é um cookie HttpOnly de 30 dias. O portal é uma página estática + API própria, fora do Basic Auth e sem circuito Blazor, então não alcança as telas do admin.
+- **Demonstração**: no Dashboard, "Criar bot de demonstração" cria o `clinica-demo` (Clínica Sorriso). O vendedor entra no portal com o próprio WhatsApp; os telefones dos leads aparecem mascarados e o Runtime limpa a demo toda madrugada (3h) ou pelo botão "Limpar demonstração". Falta o manual: chip, conectar o número e o ID de uma Google Agenda de exemplo.
+- **Produção**: sirva o painel atrás de HTTPS (`PORTAL_SECURE_COOKIES=true`). As chaves da sessão ficam em `configs/keys`.
+
 ### 2. Rodando o Painel de Controle (Wizard)
 Siga os guias de configuração do seu primeiro Bot diretamente do seu navegador:
 ```bash

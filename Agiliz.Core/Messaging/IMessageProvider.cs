@@ -1,5 +1,7 @@
 namespace Agiliz.Core.Messaging;
 
+public sealed record WhatsAppPairingResult(bool Ok, string? PairingCode, string Message);
+
 /// <summary>
 /// Interface genérica para envio de mensagens WhatsApp.
 /// Abstrai a implementação específica (Twilio, Evolution, etc).
@@ -29,6 +31,13 @@ public interface IMessageProvider
     /// </summary>
     Task<Agiliz.Core.Media.MediaContent?> DownloadMediaAsync(string instance, string messageId, CancellationToken ct = default) =>
         Task.FromResult<Agiliz.Core.Media.MediaContent?>(null);
+
+    /// <summary>
+    /// Código de pareamento para conectar o número pelo próprio celular
+    /// (WhatsApp → Aparelhos conectados → Conectar com número de telefone).
+    /// </summary>
+    Task<WhatsAppPairingResult> RequestPairingCodeAsync(string instance, string phoneNumber, CancellationToken ct = default) =>
+        Task.FromResult(new WhatsAppPairingResult(false, null, "Este provedor de mensagens não tem código de pareamento."));
 
     /// <summary>Confere se o número do bot está conectado (botão "Testar conexão").</summary>
     Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default) =>

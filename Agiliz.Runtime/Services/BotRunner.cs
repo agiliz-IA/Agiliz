@@ -21,6 +21,13 @@ public sealed class BotRunner(SessionStore sessions, ILogger<BotRunner> logger, 
         // ─── 2. Guard Rails & LLM ──────────────────────────────────
         var sessionState = sessions.AddAndGet(tenant.Config.TenantId, userPhone, ConversationMessage.User(body));
 
+        // Bot pausado pelo cliente no portal: registra a mensagem e não responde.
+        if (tenant.Config.Paused)
+        {
+            logger.LogInformation("[{Tenant}] Bot pausado pelo cliente. Mensagem de {Phone} registrada sem resposta.", tenant.Config.TenantId, userPhone);
+            return null;
+        }
+
         // Se a sessão está pausada, ignoramos a mensagem (o humano está no controle)
         if (sessionState.IsPaused)
         {

@@ -67,6 +67,8 @@ services:
       Evolution__ApiToken:       ${EVOLUTION_API_TOKEN:-change-me-default-token}
       # Protege /api/admin e /api/handoff (o painel envia o mesmo valor). Vazio = rotas desligadas.
       Runtime__AdminToken:       ${RUNTIME_ADMIN_TOKEN:-}
+      # Número reserva que envia o código do portal quando o número do bot ainda não está conectado
+      Portal__SenderNumber:      ${PORTAL_SENDER_NUMBER:-}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=evolution;Username=evolution;Password=evolution
       Database__AutoMigrate: "true"
     restart: unless-stopped
@@ -97,6 +99,8 @@ services:
       Runtime__AdminToken: ${RUNTIME_ADMIN_TOKEN:-}
       # Financeiro em reais: câmbio e custo fixo por cliente/mês de cada integração ligada
       Billing__UsdToBrl: ${BILLING_USD_TO_BRL:-}
+      # Portal do cliente (/portal): em produção fica atrás de HTTPS; o cookie da sessão só vai por HTTPS.
+      Portal__SecureCookies: ${PORTAL_SECURE_COOKIES:-true}
       Billing__FixedMonthlyBrl__whatsapp: ${BILLING_FIXED_WHATSAPP_BRL:-}
     restart: unless-stopped
     depends_on:

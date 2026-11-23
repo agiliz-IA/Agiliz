@@ -17,6 +17,12 @@ public sealed class FakeMessageProvider : IMessageProvider
 
     public List<string> ConnectionChecks { get; } = [];
 
+    /// <summary>Resposta do código de pareamento (conectar o número pelo celular).</summary>
+    public Agiliz.Core.Messaging.WhatsAppPairingResult PairingResult { get; set; } = new(true, "ABCD1234", "ok (fake)");
+
+    public Task<Agiliz.Core.Messaging.WhatsAppPairingResult> RequestPairingCodeAsync(string instance, string phoneNumber, CancellationToken ct = default) =>
+        Task.FromResult(PairingResult);
+
     public Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default)
     {
         ConnectionChecks.Add(instance);

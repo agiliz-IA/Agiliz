@@ -84,7 +84,7 @@ public static class IntegrationCatalog
         {
             Id = Ai,
             Name = "Atendimento com IA",
-            Description = "O agente que conversa com o cliente final, usando o prompt e as respostas rápidas do bot.",
+            Description = "O assistente virtual que conversa com seus clientes no WhatsApp, com as informações do seu negócio.",
             AlwaysOn = true,
             CostKind = IntegrationCostKind.PerUse,
             CostNote = "Tokens do modelo (gpt-oss-120b no Groq: US$ 0,15 / 0,60 por milhão de tokens)."
@@ -93,13 +93,13 @@ public static class IntegrationCatalog
         {
             Id = WhatsApp,
             Name = "WhatsApp (não oficial)",
-            Description = "Canal de mensagens via Evolution API, conectado por QR code a um número do cliente.",
+            Description = "Atendimento pelo WhatsApp num número do seu negócio, conectado ao Agiliz.",
             AlwaysOn = true,
             Testable = true,
             ClientSteps =
             [
                 new("chip", "Separar um número (de preferência novo) só para o bot."),
-                new("qr", "Escanear o QR code da instância na Evolution com esse número.")
+                new("qr", "Conectar o número ao Agiliz pelo celular (código de conexão) ou por QR code.")
             ],
             CostKind = IntegrationCostKind.None,
             CostNote = "Sem custo por mensagem; entra na hospedagem. Risco de bloqueio do número pela Meta."
@@ -123,7 +123,7 @@ public static class IntegrationCatalog
         {
             Id = GoogleCalendar,
             Name = "Google Agenda",
-            Description = "O agente consulta horários livres, marca, remarca e cancela consultas na agenda do cliente.",
+            Description = "O assistente consulta horários livres, marca, remarca e cancela consultas na sua agenda.",
             OnlyFor = BotType.Scheduling,
             Testable = true,
             Fields =
@@ -155,7 +155,7 @@ public static class IntegrationCatalog
         {
             Id = Audio,
             Name = "Transcrição de áudio",
-            Description = "Notas de voz do cliente viram texto antes de ir para o agente.",
+            Description = "O assistente entende mensagens de voz: os áudios viram texto automaticamente.",
             Testable = true,
             CostKind = IntegrationCostKind.PerUse,
             CostNote = "Whisper no Groq: US$ 0,04 por hora de áudio (mínimo de 10 s por áudio)."
@@ -164,7 +164,7 @@ public static class IntegrationCatalog
         {
             Id = Email,
             Name = "Envio de e-mail",
-            Description = "O agente pode enviar e-mails (confirmações, resumos) pelo SMTP configurado no servidor.",
+            Description = "O assistente envia e-mails de confirmação e resumos quando precisar.",
             Testable = true,
             ToolNames = ["send_email"],
             CostKind = IntegrationCostKind.PerUse,
@@ -174,7 +174,7 @@ public static class IntegrationCatalog
         {
             Id = Handoff,
             Name = "Transbordo para humano",
-            Description = "O agente pausa o bot e passa a conversa para a equipe do cliente, que responde pelo painel.",
+            Description = "Quando precisa, o assistente passa a conversa para a sua equipe, que responde pelo portal.",
             ToolNames = ["chamar_atendente"],
             CostKind = IntegrationCostKind.None,
             CostNote = "Sem custo."

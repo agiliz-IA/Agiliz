@@ -37,6 +37,10 @@ public sealed record PriceUpdate(decimal? MonthlyPriceBrl);
 
 public sealed record PlanAssignment(string? PlanId);
 
+public sealed record PortalSettings(string? DisplayName, List<string>? PortalPhones, bool IsDemo);
+
+public sealed record DemoBotRequest(string? WhatsAppNumber, List<string>? SellerPhones);
+
 public sealed record IntegrationUsage(IntegrationDefinition Definition, IReadOnlyList<string> Tenants);
 
 public sealed record SaveOutcome(bool Ok, string? Error = null, bool RuntimeReloaded = false, string? RuntimeError = null)
@@ -146,6 +150,36 @@ public sealed class BotIntegrationService(IConfiguration configuration, RuntimeA
 
         var config = BotConfigLoader.Load(ConfigsDir, tenantId);
         return await SaveAsync(config with { PlanId = planId }, ct);
+    }
+
+    /// <summary>Cliente pausa ou reativa o bot inteiro pelo portal.</summary>
+    public async Task<SaveOutcome> SetPausedAsync(string tenantId, bool paused, CancellationToken ct = default)
+    {
+        if (!BotConfigLoader.Exists(ConfigsDir, tenantId)) return SaveOutcome.Fail("Bot não encontrado.");
+        var config = BotConfigLoader.Load(ConfigsDir, tenantId);
+        return await SaveAsync(config with { Paused = paused }, ct);
+    }
+
+    /// <summary>Nome no portal, telefones com acesso e se é bot de demonstração (aba Integrações do admin).</summary>
+    public async Task<SaveOutcome> SetPortalSettingsAsync(string tenantId, string? displayName, IEnumerable<string> portalPhones, bool isDemo, CancellationToken ct = default)
+    {
+        if (!BotConfigLoader.Exists(ConfigsDir, tenantId)) return SaveOutcome.Fail("Bot não encontrado.");
+
+        var phones = portalPhones
+            .Select(Agiliz.Wizard.Portal.PortalAuthService.NormalizePhone)
+            .Where(p => p.Length > 0)
+            .Distinct()
+            .ToList();
+        var invalid = phones.Where(p => p.Length is < 12 or > 13).ToList();
+        if (invalid.Count > 0) return SaveOutcome.Fail($"Telefone inválido: {string.Join(", ", invalid)}. Use DDD + número (DDI opcional).");
+
+        var config = BotConfigLoader.Load(ConfigsDir, tenantId);
+        return await SaveAsync(config with
+        {
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
+            PortalPhones = phones,
+            IsDemo = isDemo
+        }, ct);
     }
 
     /// <summary>Preço mensal de cada bot (para a margem no Financeiro).</summary>

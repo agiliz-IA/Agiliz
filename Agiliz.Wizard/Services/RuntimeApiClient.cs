@@ -8,6 +8,14 @@ namespace Agiliz.Wizard.Services;
 
 public sealed record RuntimeCallResult(bool Ok, string? Error = null);
 
+public sealed record RuntimeConversation(string Phone, string? Name, bool IsPaused, DateTimeOffset? PausedAt, DateTimeOffset LastActivityAt, string? LastMessagePreview);
+
+public sealed record RuntimeMessage(string Role, string Text);
+
+public sealed record RuntimeMessages(bool IsPaused, List<RuntimeMessage> Messages);
+
+public sealed record RuntimeAppointment(Guid Id, string Phone, string? Name, DateTimeOffset ScheduledTime, int DurationMinutes, string Status, DateTimeOffset? ConfirmedAt);
+
 /// <summary>
 /// Chamadas do painel para o Runtime (reload de bots, billing, handoff).
 /// Base em <c>Runtime:ApiUrl</c>; envia <c>Runtime:AdminToken</c> no header <see cref="AdminTokenHeader"/>.
@@ -138,6 +146,78 @@ public sealed class RuntimeApiClient(IHttpClientFactory httpFactory, ILogger<Run
     }
 
     private sealed record UsageResponse(string Month, List<Agiliz.Core.Plans.TenantUsage> Tenants);
+
+    // ─── Dados de um cliente (portal) ────────────────────────────────────────
+
+    private static string TenantPath(string tenantId) => $"api/admin/tenants/{Uri.EscapeDataString(tenantId)}";
+
+    /// <summary>Conversas recentes do cliente. Lança exceção se o Runtime não responder.</summary>
+    public async Task<IReadOnlyList<RuntimeConversation>> GetConversationsAsync(string tenantId, int limit = 50, CancellationToken ct = default) =>
+        await GetJsonAsync<List<RuntimeConversation>>($"{TenantPath(tenantId)}/conversations?limit={limit}", ct) ?? [];
+
+    public Task<RuntimeMessages?> GetMessagesAsync(string tenantId, string phone, CancellationToken ct = default) =>
+        GetJsonAsync<RuntimeMessages>($"{TenantPath(tenantId)}/conversations/{Uri.EscapeDataString(phone)}/messages", ct);
+
+    public async Task<IReadOnlyList<RuntimeAppointment>> GetAppointmentsAsync(string tenantId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default) =>
+        await GetJsonAsync<List<RuntimeAppointment>>(
+            $"{TenantPath(tenantId)}/appointments?from={Uri.EscapeDataString(from.ToString("O"))}&to={Uri.EscapeDataString(to.ToString("O"))}", ct) ?? [];
+
+    public Task<bool> PauseConversationAsync(string tenantId, string phone, CancellationToken ct = default) =>
+        PostOkAsync($"{TenantPath(tenantId)}/conversations/{Uri.EscapeDataString(phone)}/pause", null, ct);
+
+    public Task<bool> ResumeConversationAsync(string tenantId, string phone, CancellationToken ct = default) =>
+        PostOkAsync($"{TenantPath(tenantId)}/conversations/{Uri.EscapeDataString(phone)}/resume", null, ct);
+
+    public Task<bool> ReplyAsync(string tenantId, string phone, string body, CancellationToken ct = default) =>
+        PostOkAsync($"{TenantPath(tenantId)}/conversations/{Uri.EscapeDataString(phone)}/reply", new { body }, ct);
+
+    public Task<bool> SendPortalCodeAsync(string tenantId, string phone, string code, CancellationToken ct = default) =>
+        PostOkAsync($"{TenantPath(tenantId)}/portal-code", new { phone, code }, ct);
+
+    public async Task<Agiliz.Core.Messaging.WhatsAppPairingResult> RequestPairingAsync(string tenantId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await CreateClient().PostAsync($"{TenantPath(tenantId)}/whatsapp/pairing", null, ct);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<Agiliz.Core.Messaging.WhatsAppPairingResult>(JsonOpts, ct) ?? new(false, null, "Resposta vazia.")
+                : new(false, null, $"O servidor respondeu HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, null, $"Servidor indisponível: {ex.Message}");
+        }
+    }
+
+    public Task<bool> ResetDemoAsync(string tenantId, CancellationToken ct = default) =>
+        PostOkAsync($"{TenantPath(tenantId)}/demo/reset", null, ct);
+
+    private async Task<T?> GetJsonAsync<T>(string path, CancellationToken ct)
+    {
+        using var response = await CreateClient().GetAsync(path, ct);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {Shorten(await response.Content.ReadAsStringAsync(ct))}");
+        return await response.Content.ReadFromJsonAsync<T>(JsonOpts, ct);
+    }
+
+    /// <summary>POST que só precisa saber se deu certo. Não lança exceção.</summary>
+    private async Task<bool> PostOkAsync(string path, object? body, CancellationToken ct)
+    {
+        try
+        {
+            using var response = body is null
+                ? await CreateClient().PostAsync(path, null, ct)
+                : await CreateClient().PostAsJsonAsync(path, body, JsonOpts, ct);
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("Runtime recusou {Path}: HTTP {Status}", path, (int)response.StatusCode);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Runtime inacessível em {Path}", path);
+            return false;
+        }
+    }
 
     private static string Shorten(string text) => text.Length <= 200 ? text : text[..200] + "…";
 }

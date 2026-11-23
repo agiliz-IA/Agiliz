@@ -91,5 +91,29 @@ public sealed class EvolutionClientTests : IDisposable
         result.Message.Should().Contain(expected);
     }
 
+    [Fact]
+    public async Task RequestPairingCodeAsync_ReturnsCodeForNumber()
+    {
+        _server.Given(Request.Create().WithPath("/instance/connect/5521900000000").WithParam("number", "5521900000000").UsingGet())
+               .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { pairingCode = "WZYEH1YY", code = "2@abc", count = 1 }));
+
+        var result = await CreateClient().RequestPairingCodeAsync("5521900000000", "+55 (21) 90000-0000");
+
+        result.Ok.Should().BeTrue();
+        result.PairingCode.Should().Be("WZYEH1YY");
+    }
+
+    [Fact]
+    public async Task RequestPairingCodeAsync_UnknownInstance_ExplainsInPortuguese()
+    {
+        _server.Given(Request.Create().WithPath("/instance/connect/5521900000000").UsingGet())
+               .RespondWith(Response.Create().WithStatusCode(404));
+
+        var result = await CreateClient().RequestPairingCodeAsync("5521900000000", "5521900000000");
+
+        result.Ok.Should().BeFalse();
+        result.Message.Should().Contain("equipe Agiliz");
+    }
+
     public void Dispose() => _server.Stop();
 }
