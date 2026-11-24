@@ -549,6 +549,12 @@
             el("p", { class: "small muted" }, "O código vale por poucos minutos. Assim que você digitar, esta tela confirma sozinha."));
           stopPolling();
           state.timer = setInterval(check, 5000);
+        } else if (r.ok && r.qrCodeDataUrl) {
+          // Sem código: QR para o celular do bot ler (abra esta tela em outro aparelho, como o computador).
+          codeBox.replaceChildren(el("img", { class: "pairing-qr", src: r.qrCodeDataUrl, alt: "QR code para conectar o WhatsApp" }),
+            el("p", { class: "small muted" }, "No celular do bot: WhatsApp › Aparelhos conectados › Conectar um aparelho, e aponte para este QR. Ele muda a cada ~40 s; se expirar, gere outro."));
+          stopPolling();
+          state.timer = setInterval(check, 5000);
         } else {
           codeBox.replaceChildren(el("div", { class: "result result-fail" }, r.message));
         }

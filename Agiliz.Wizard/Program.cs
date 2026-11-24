@@ -388,7 +388,7 @@ app.MapPut("/api/bots/{id}/plan", async (string id, PlanAssignment body, Agiliz.
 // POST /api/demo-bot — cria o bot de demonstração (clinica-demo) para o vendedor
 app.MapPost("/api/demo-bot", async (DemoBotRequest body, DemoBotService demo, CancellationToken ct) =>
 {
-    var outcome = await demo.CreateAsync(body.WhatsAppNumber ?? "", body.SellerPhones ?? [], ct);
+    var outcome = await demo.CreateAsync(body.WhatsAppNumber ?? "", body.SellerPhones ?? [], body.RespondOnlyTo, ct);
     return outcome.Ok
         ? Results.Json(new { tenantId = DemoBotService.TenantId, runtimeReloaded = outcome.RuntimeReloaded }, jsonOpts, statusCode: StatusCodes.Status201Created)
         : Results.BadRequest(new { error = outcome.Error });
@@ -398,7 +398,7 @@ app.MapPost("/api/demo-bot", async (DemoBotRequest body, DemoBotService demo, Ca
 app.MapPut("/api/bots/{id}/portal", async (string id, PortalSettings body, BotIntegrationService integrations, CancellationToken ct) =>
 {
     if (!BotConfigLoader.Exists(configsDir, id)) return Results.NotFound();
-    var outcome = await integrations.SetPortalSettingsAsync(id, body.DisplayName, body.PortalPhones ?? [], body.IsDemo, ct);
+    var outcome = await integrations.SetPortalSettingsAsync(id, body.DisplayName, body.PortalPhones ?? [], body.IsDemo, body.RespondOnlyTo, ct);
     return outcome.Ok ? Results.NoContent() : Results.BadRequest(new { error = outcome.Error });
 });
 

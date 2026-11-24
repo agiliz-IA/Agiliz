@@ -206,6 +206,7 @@ meter { width: 100%; height: 10px; }
 .result-ok { background: var(--ok-soft); color: var(--ok); }
 .result-fail { background: var(--danger-soft); color: var(--danger); }
 .pairing-code { font-size: 34px; font-weight: 800; letter-spacing: .12em; text-align: center; font-variant-numeric: tabular-nums; padding: 16px; background: var(--surface-2); border-radius: var(--radius); margin: 12px 0; user-select: all; }
+.pairing-qr { display: block; width: 260px; max-width: 100%; height: auto; margin: 12px auto; background: #fff; padding: 10px; border-radius: var(--radius); }
 ol.howto { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; color: var(--text-2); }
 
 /* ─── Aviso flutuante ─────────────────────────────────────────────────── */

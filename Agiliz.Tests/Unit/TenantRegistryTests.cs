@@ -11,13 +11,10 @@ public sealed class TenantRegistryTests : IDisposable
 {
     private readonly TempDirectory _dir = TestFixtures.CreateTempDir();
 
-    private TenantRegistry BuildRegistry()
-    {
-        // TenantRegistry chama LlmClientFactory que precisa de env vars.
-        // Setamos valores falsos para que não lance antes de precisar da API.
-        Environment.SetEnvironmentVariable("GROQ_API_KEY", "test-key");
-        return new TenantRegistry(_dir.Path, NullLogger<TenantRegistry>.Instance);
-    }
+    // LLM falso: sem depender de GROQ_API_KEY, que outras classes de teste rodando em paralelo
+    // definem e apagam (era a causa de falhas intermitentes aqui).
+    private TenantRegistry BuildRegistry() =>
+        new(_dir.Path, NullLogger<TenantRegistry>.Instance, _ => new Agiliz.Tests.Fakes.FakeLlmClient());
 
     [Fact]
     public void Resolve_WithCorrectNumber_ReturnsTenant()
@@ -127,9 +124,5 @@ public sealed class TenantRegistryTests : IDisposable
         result.Errors.Should().ContainSingle(e => e.TenantId == "b-repetido");
     }
 
-    public void Dispose()
-    {
-        _dir.Dispose();
-        Environment.SetEnvironmentVariable("GROQ_API_KEY", null);
-    }
+    public void Dispose() => _dir.Dispose();
 }

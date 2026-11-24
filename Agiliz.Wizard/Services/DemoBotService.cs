@@ -21,7 +21,8 @@ public sealed class DemoBotService(IConfiguration configuration, PlanStore plans
 
     /// <param name="whatsAppNumber">Número do chip da demonstração (instância na Evolution).</param>
     /// <param name="sellerPhones">WhatsApp dos vendedores: entram no portal na conta demo.</param>
-    public async Task<SaveOutcome> CreateAsync(string whatsAppNumber, IEnumerable<string> sellerPhones, CancellationToken ct = default)
+    /// <param name="respondOnlyTo">Se o número for pessoal: só estes números recebem resposta do bot.</param>
+    public async Task<SaveOutcome> CreateAsync(string whatsAppNumber, IEnumerable<string> sellerPhones, IEnumerable<string>? respondOnlyTo = null, CancellationToken ct = default)
     {
         var number = new string((whatsAppNumber ?? "").Where(char.IsDigit).ToArray());
         if (number.Length < 10) return SaveOutcome.Fail("Informe o número do chip da demonstração com DDD.");
@@ -30,7 +31,8 @@ public sealed class DemoBotService(IConfiguration configuration, PlanStore plans
         var phones = sellerPhones.Select(PortalAuthService.NormalizePhone).Where(p => p.Length is 12 or 13).Distinct().ToList();
         if (phones.Count == 0) return SaveOutcome.Fail("Informe ao menos um WhatsApp de vendedor para entrar no portal.");
 
-        var config = Build(number, phones, plans.Get("clinica")?.Id ?? plans.List().LastOrDefault()?.Id);
+        var onlyTo = (respondOnlyTo ?? []).Select(Agiliz.Core.Messaging.PhoneNumbers.Normalize).Where(p => p.Length is 12 or 13).Distinct().ToList();
+        var config = Build(number, phones, plans.Get("clinica")?.Id ?? plans.List().LastOrDefault()?.Id) with { RespondOnlyTo = onlyTo };
         BotConfigLoader.Save(ConfigsDir, config);
         var reload = await runtime.ReloadAsync(ct);
         return new SaveOutcome(true, RuntimeReloaded: reload.Ok, RuntimeError: reload.Error);

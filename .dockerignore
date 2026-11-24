@@ -1,0 +1,13 @@
+# Não enviar ao build do Docker: segredos, dados dos clientes e saídas de build do Windows
+.env
+*.env
+configs/
+**/bin/
+**/obj/
+.git/
+.vs/
+.vscode/
+.idea/
+.claude/
+Agiliz.Tests/
+**/*.user

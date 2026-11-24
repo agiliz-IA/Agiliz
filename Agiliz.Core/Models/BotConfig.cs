@@ -47,6 +47,12 @@ public sealed record BotConfig
 
     /// <summary>Bot de demonstração: limpo toda madrugada e com telefones mascarados no portal.</summary>
     public bool IsDemo { get; init; }
+
+    /// <summary>
+    /// Se preenchido, o bot só atende estes números; mensagens de outros são ignoradas por completo
+    /// (sem resposta, sem registro, sem custo). Para demonstrar num número pessoal sem atender os contatos dele.
+    /// </summary>
+    public List<string> RespondOnlyTo { get; init; } = [];
 }
 
 public sealed class IntegrationSettings

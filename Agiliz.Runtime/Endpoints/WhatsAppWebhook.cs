@@ -105,6 +105,12 @@ public static class WhatsAppWebhook
             return Results.Ok();
         }
 
+        // Bot em número pessoal (demonstração): só atende os números liberados. Os demais nem são
+        // registrados — antes de transcrever áudio, contar franquia ou gravar a conversa.
+        if (tenant.Config.RespondOnlyTo.Count > 0 &&
+            !tenant.Config.RespondOnlyTo.Any(allowed => Agiliz.Core.Messaging.PhoneNumbers.Matches(allowed, senderNumber)))
+            return Results.Ok();
+
         var body = ExtractText(message);
 
         if (string.IsNullOrWhiteSpace(body) && message.AudioMessage is not null)

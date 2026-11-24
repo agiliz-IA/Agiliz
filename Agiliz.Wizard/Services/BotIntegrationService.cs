@@ -37,9 +37,9 @@ public sealed record PriceUpdate(decimal? MonthlyPriceBrl);
 
 public sealed record PlanAssignment(string? PlanId);
 
-public sealed record PortalSettings(string? DisplayName, List<string>? PortalPhones, bool IsDemo);
+public sealed record PortalSettings(string? DisplayName, List<string>? PortalPhones, bool IsDemo, List<string>? RespondOnlyTo = null);
 
-public sealed record DemoBotRequest(string? WhatsAppNumber, List<string>? SellerPhones);
+public sealed record DemoBotRequest(string? WhatsAppNumber, List<string>? SellerPhones, List<string>? RespondOnlyTo = null);
 
 public sealed record IntegrationUsage(IntegrationDefinition Definition, IReadOnlyList<string> Tenants);
 
@@ -161,16 +161,14 @@ public sealed class BotIntegrationService(IConfiguration configuration, RuntimeA
     }
 
     /// <summary>Nome no portal, telefones com acesso e se é bot de demonstração (aba Integrações do admin).</summary>
-    public async Task<SaveOutcome> SetPortalSettingsAsync(string tenantId, string? displayName, IEnumerable<string> portalPhones, bool isDemo, CancellationToken ct = default)
+    public async Task<SaveOutcome> SetPortalSettingsAsync(string tenantId, string? displayName, IEnumerable<string> portalPhones, bool isDemo,
+        IEnumerable<string>? respondOnlyTo = null, CancellationToken ct = default)
     {
         if (!BotConfigLoader.Exists(ConfigsDir, tenantId)) return SaveOutcome.Fail("Bot não encontrado.");
 
-        var phones = portalPhones
-            .Select(Agiliz.Wizard.Portal.PortalAuthService.NormalizePhone)
-            .Where(p => p.Length > 0)
-            .Distinct()
-            .ToList();
-        var invalid = phones.Where(p => p.Length is < 12 or > 13).ToList();
+        var (phones, invalidPortal) = CleanPhones(portalPhones);
+        var (onlyTo, invalidOnly) = CleanPhones(respondOnlyTo ?? []);
+        var invalid = invalidPortal.Concat(invalidOnly).ToList();
         if (invalid.Count > 0) return SaveOutcome.Fail($"Telefone inválido: {string.Join(", ", invalid)}. Use DDD + número (DDI opcional).");
 
         var config = BotConfigLoader.Load(ConfigsDir, tenantId);
@@ -178,8 +176,15 @@ public sealed class BotIntegrationService(IConfiguration configuration, RuntimeA
         {
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
             PortalPhones = phones,
-            IsDemo = isDemo
+            IsDemo = isDemo,
+            RespondOnlyTo = respondOnlyTo is null ? config.RespondOnlyTo : onlyTo
         }, ct);
+    }
+
+    private static (List<string> Valid, List<string> Invalid) CleanPhones(IEnumerable<string> input)
+    {
+        var phones = input.Select(Agiliz.Core.Messaging.PhoneNumbers.Normalize).Where(p => p.Length > 0).Distinct().ToList();
+        return (phones.Where(p => p.Length is 12 or 13).ToList(), phones.Where(p => p.Length is < 12 or > 13).ToList());
     }
 
     /// <summary>Preço mensal de cada bot (para a margem no Financeiro).</summary>

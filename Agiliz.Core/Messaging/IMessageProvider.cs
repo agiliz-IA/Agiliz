@@ -1,6 +1,7 @@
 namespace Agiliz.Core.Messaging;
 
-public sealed record WhatsAppPairingResult(bool Ok, string? PairingCode, string Message);
+/// <summary>Código de pareamento para digitar no WhatsApp ou, quando a Evolution não devolve o código, o QR code (data URL).</summary>
+public sealed record WhatsAppPairingResult(bool Ok, string? PairingCode, string Message, string? QrCodeDataUrl = null);
 
 /// <summary>
 /// Interface genérica para envio de mensagens WhatsApp.

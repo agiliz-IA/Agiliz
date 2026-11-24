@@ -254,6 +254,24 @@ public sealed class RuntimeWebhookTests : IDisposable
         _costs.Entries.Should().NotContain(e => e.IntegrationId == Agiliz.Core.Integrations.IntegrationCatalog.Audio);
     }
 
+    [Fact]
+    public async Task Webhook_RespondOnlyTo_IgnoresOtherContactsCompletely()
+    {
+        using var factory = BuildFactory();
+        // Demonstração num número pessoal: só o 5521912345678 é atendido.
+        BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "test-bot", whatsappNumber: "15005550006")
+            .WithFlows(("oi", "Ola! Como posso ajudar?")) with { RespondOnlyTo = ["5521912345678"] });
+        var client = factory.CreateClient();
+
+        await client.PostAsync("/webhook", V2Payload("15005550006", "5521911112222@s.whatsapp.net", new { conversation = "oi" }));
+        _fakeProvider.Sent.Should().BeEmpty("contato pessoal fora da lista não recebe resposta");
+        _costs.Entries.Should().BeEmpty();
+
+        // Conta antiga chega sem o nono dígito: continua sendo o mesmo número liberado.
+        await client.PostAsync("/webhook", V2Payload("15005550006", "552112345678@s.whatsapp.net", new { conversation = "oi" }));
+        _fakeProvider.Sent.Should().ContainSingle(m => m.Body == "Ola! Como posso ajudar?");
+    }
+
     private sealed class FakeTranscriber(string text) : Agiliz.Core.Media.IAudioTranscriber
     {
         public int Calls { get; private set; }

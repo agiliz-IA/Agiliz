@@ -126,8 +126,13 @@ public sealed class EvolutionClient : IMessageProvider
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (doc.RootElement.TryGetProperty("pairingCode", out var code) && code.GetString() is { Length: > 0 } pairing)
+                if (doc.RootElement.TryGetProperty("pairingCode", out var code) && code.ValueKind == System.Text.Json.JsonValueKind.String && code.GetString() is { Length: > 0 } pairing)
                     return new(true, pairing, "Digite o código no WhatsApp do número do bot.");
+
+                // A v2.1.1 às vezes só devolve o QR: o celular do bot lê a tela de outro aparelho.
+                if (doc.RootElement.TryGetProperty("base64", out var qr) && qr.ValueKind == System.Text.Json.JsonValueKind.String &&
+                    qr.GetString() is { } dataUrl && dataUrl.StartsWith("data:image/", StringComparison.Ordinal))
+                    return new(true, null, "Escaneie o QR code com o WhatsApp do número do bot (Aparelhos conectados › Conectar um aparelho).", dataUrl);
                 if (doc.RootElement.TryGetProperty("instance", out var inst) && inst.TryGetProperty("state", out var state) && state.GetString() == "open")
                     return new(false, null, "Este número já está conectado.");
             }
