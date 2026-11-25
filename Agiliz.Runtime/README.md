@@ -4,6 +4,8 @@ Este documento detalha o passo a passo para configurar e testar o envio e recebi
 
 O **Evolution API** é um serviço open-source (já incluído no `docker-compose.yml` deste projeto) que gerencia instâncias do WhatsApp via Web, convertendo as mensagens em requisições REST/JSON e Webhooks.
 
+> **Atalho (Docker):** com `Evolution:WebhookUrl` configurado (o `docker-compose.yml` já faz isso), o botão **Gerar código de conexão** do painel cria a instância e configura o webhook sozinho. Os passos 3 e 4 abaixo só são necessários fora do Docker ou se o botão falhar.
+
 ---
 
 ## 1. Subindo a infraestrutura
@@ -23,10 +25,10 @@ Neste momento, os seguintes serviços relevantes estarão ativos:
 ## 2. Autenticação na API do Evolution (Global API Key)
 
 Toda requisição feita para o Evolution API precisa de uma chave de autenticação (API Token). 
-Essa chave é definida no arquivo `.env` da raiz do projeto através da variável `EVOLUTION_API_TOKEN` e é repassada tanto para o contêiner do Evolution quanto para o Agiliz.Runtime.
+Essa chave é definida no arquivo `.env` da raiz do projeto através da variável `AUTHENTICATION_API_KEY` e é repassada tanto para o contêiner do Evolution quanto para o Agiliz.Runtime (`Evolution__ApiToken`).
 
 Nas requisições abaixo (via Postman, Insomnia ou cURL), lembre-se de enviar o header:
-`apikey: <SEU_EVOLUTION_API_TOKEN>`
+`apikey: <SEU_AUTHENTICATION_API_KEY>`
 
 Se você não tiver alterado, o valor padrão no `docker-compose.yml` é `change-me-default-token`.
 
@@ -111,4 +113,4 @@ Envie uma mensagem de um **outro celular** para o número de WhatsApp que você 
 - **O Webhook não está sendo ativado:** Verifique nos logs do Evolution se o evento `MESSAGES_UPSERT` está ativado e se a URL do webhook não possui erros de digitação.
 - **O bot recebe a mensagem, mas não responde:** Pode ser um erro na requisição do Agiliz para o Evolution na hora da resposta. Verifique os logs do Runtime com o comando: `docker logs agiliz-runtime -f`
 - **Bot novo ou editado não responde:** o painel pede o reload ao salvar. Se o JSON foi mudado à mão em `configs/bots/`, recarregue com `curl -X POST -H "X-Admin-Token: $RUNTIME_ADMIN_TOKEN" http://localhost:5000/api/admin/reload` — a resposta lista os bots carregados e os que deram erro.
-- **Token inválido:** Verifique se o `EVOLUTION_API_TOKEN` no `.env` do Runtime é exatamente o mesmo configurado e usado na API Global do Evolution.
+- **Token inválido:** Confira o `AUTHENTICATION_API_KEY` no `.env` (no Docker, a Evolution e o Runtime usam o mesmo valor).

@@ -36,10 +36,10 @@ Não precisa instalar .NET para rodar no Docker.
 |---|---|---|
 | Chave do **Groq** (`GROQ_API_KEY`) | Sim | https://console.groq.com/keys → *Create API Key*. Tem plano gratuito. |
 | Chave da **Anthropic** (`ANTHROPIC_API_KEY`) | Não | https://console.anthropic.com/settings/keys. Só se algum bot usar Claude. |
-| Senha da **Evolution** (`AUTHENTICATION_API_KEY` = `EVOLUTION_API_TOKEN`) | Sim | Você inventa (valor aleatório). Os dois têm que ser iguais. |
+| Senha da **Evolution** (`AUTHENTICATION_API_KEY`) | Sim | Você inventa (valor aleatório). |
 | Senha **painel ↔ motor** (`RUNTIME_ADMIN_TOKEN`) | Sim | Você inventa (valor aleatório). |
 | Login do **painel** (`WIZARD_ADMIN_USER` / `WIZARD_ADMIN_PASSWORD`) | Sim | Você inventa. |
-| Credencial da **Google Agenda** (arquivo) | Sim no Docker | Veja "Google Agenda" logo abaixo. |
+| Credencial da **Google Agenda** (arquivo) | Para o bot agendar | Veja "Google Agenda" logo abaixo. Dá para deixar para depois. |
 
 Para gerar um valor aleatório:
 - Windows (PowerShell): `-join ((48..57)+(65..90) | Get-Random -Count 32 | % {[char]$_})`
@@ -53,11 +53,9 @@ cp .env.example .env
 ```
 Abra o `.env` num editor de texto (Bloco de Notas serve) e preencha. Cada linha do `.env.example` explica o que é e onde pegar. **Nunca** mande o `.env` por chat nem coloque no git.
 
-### Passo 3 — Google Agenda (arquivo de credencial)
+### Passo 3 — Google Agenda (pode deixar para depois)
 
-O bot de agendamento lê e grava na Google Agenda usando uma **conta de serviço** do Google (é gratuito).
-
-> ⚠️ **No Docker o motor não sobe sem esse arquivo** (ele roda em modo produção e exige a credencial). Se você ainda não for usar agenda, crie a credencial mesmo assim; ela só não será usada.
+O bot de agendamento lê e grava na Google Agenda usando uma **conta de serviço** do Google (é gratuito). Sem esse arquivo tudo sobe e funciona, só a agenda fica desligada. Depois de salvar o arquivo, rode `docker compose restart runtime`.
 
 1. Entre em https://console.cloud.google.com/ e crie um projeto (ex.: "agiliz").
 2. Em **APIs e serviços → Biblioteca**, ative a **Google Calendar API**.
@@ -83,28 +81,31 @@ Se algo não subir, veja o log do serviço, por exemplo: `docker compose logs ru
 
 ### Passo 5 — Conectar um número de WhatsApp
 
-Cada número de WhatsApp é uma **instância** na Evolution, e o nome da instância tem que ser **o próprio número** (só dígitos, com 55 e DDD, ex.: `5511999999999`). O mesmo número vai no bot, no painel.
+Tudo pelo painel, sem mexer na Evolution:
 
-Rode os dois comandos abaixo trocando `SUA_SENHA_EVOLUTION` (o valor de `AUTHENTICATION_API_KEY`) e o número. No Windows use o **Git Bash** (vem com o Git) para colar como está.
-
-1. Criar a instância:
-   ```bash
-   curl -X POST http://localhost:8080/instance/create \
-     -H "apikey: SUA_SENHA_EVOLUTION" -H "Content-Type: application/json" \
-     -d '{"instanceName":"5511999999999","qrcode":true,"integration":"WHATSAPP-BAILEYS"}'
-   ```
-2. Mandar as mensagens desse número para o motor (webhook):
-   ```bash
-   curl -X POST http://localhost:8080/webhook/set/5511999999999 \
-     -H "apikey: SUA_SENHA_EVOLUTION" -H "Content-Type: application/json" \
-     -d '{"webhook":{"enabled":true,"url":"http://runtime:8080/webhook","byEvents":false,"events":["MESSAGES_UPSERT"]}}'
-   ```
-   A URL é `http://runtime:8080/webhook` mesmo: é o endereço do motor **dentro** do Docker. Esse webhook não precisa ficar público.
-3. Crie o bot no painel com esse mesmo número (veja o [guia](docs/GUIA-DO-PAINEL.md)), vá em **Integrações do bot → WhatsApp → Gerar código de conexão** e leia o QR com o celular do número (WhatsApp → Aparelhos conectados → Conectar um aparelho).
+1. Crie o bot no painel com o número de WhatsApp dele (só dígitos, com 55 e DDD, ex.: `5511999999999`). Veja o [guia](docs/GUIA-DO-PAINEL.md).
+2. No bot, abra **Integrações → WhatsApp → Gerar código de conexão**. O Agiliz prepara o número na Evolution sozinho (cria a "instância" e liga o webhook) e mostra um QR code.
+3. No celular do número do bot: WhatsApp → **Aparelhos conectados → Conectar um aparelho**, e leia o QR. Ele muda a cada ~40 s; se expirar, gere de novo.
 4. Clique em **Testar conexão**. Deve aparecer "WhatsApp conectado".
 5. Mande uma mensagem de **outro celular** para o número. O bot responde.
 
-> *Não verificado:* a Evolution v2 costuma ter uma tela própria em http://localhost:8080/manager para criar instâncias sem `curl`. Se existir na versão do projeto, também serve (use a mesma senha).
+O cliente também pode conectar o número sozinho pelo portal (Integrações → Conectar o WhatsApp).
+
+Se o QR não aparecer (fica carregando para sempre, inclusive no painel da própria Evolution), confira em `docker-compose.yml` se a imagem é `evoapicloud/evolution-api:v2.3.7` ou mais nova. A imagem antiga `atendai/evolution-api:v2.1.1` usa uma versão do WhatsApp Web que o WhatsApp não aceita mais. Depois de trocar: `docker compose pull evolution-api && docker compose up -d`.
+
+<details>
+<summary>Fazer à mão pela Evolution (só se o botão falhar)</summary>
+
+Troque `SUA_SENHA_EVOLUTION` (o `AUTHENTICATION_API_KEY`) e o número. No Windows use o Git Bash.
+```bash
+curl -X POST http://localhost:8080/instance/create \
+  -H "apikey: SUA_SENHA_EVOLUTION" -H "Content-Type: application/json" \
+  -d '{"instanceName":"5511999999999","qrcode":true,"integration":"WHATSAPP-BAILEYS"}'
+curl -X POST http://localhost:8080/webhook/set/5511999999999 \
+  -H "apikey: SUA_SENHA_EVOLUTION" -H "Content-Type: application/json" \
+  -d '{"webhook":{"enabled":true,"url":"http://runtime:8080/webhook","byEvents":false,"events":["MESSAGES_UPSERT"]}}'
+```
+</details>
 
 ### Parar, reiniciar e atualizar
 
@@ -199,7 +200,7 @@ O agente só recebe as ferramentas das integrações ligadas. Bots criados antes
 - **Propostas** (`configs/proposals/`): quiz salvo para retomar e medir conversão. "Criar bot" leva as respostas ao meta-agente e, ao salvar, aplica plano, integrações e LGPD ao bot. Guardam nome e telefone do contato do lead.
 
 ### Portal do cliente e demonstração
-- **Portal** (`/portal` no painel): página para o cliente acompanhar o bot no PC ou no celular — início com uso da franquia, conversas (assumir, responder, devolver ao bot), agenda do dia, pausar o bot, integrações do plano e conexão do número por QR code (a Evolution v2.1.1 não devolve o código de pareamento).
+- **Portal** (`/portal` no painel): página para o cliente acompanhar o bot no PC ou no celular — início com uso da franquia, conversas (assumir, responder, devolver ao bot), agenda do dia, pausar o bot, integrações do plano e conexão do número por QR code (a Evolution pode devolver só o QR, sem código de pareamento).
 - **Acesso**: o admin cadastra os WhatsApp com acesso na aba Integrações do bot (card "Portal do cliente"). O cliente entra com um código de 6 dígitos enviado pelo WhatsApp; a sessão é um cookie HttpOnly de 30 dias. O portal é uma página estática + API própria, fora do Basic Auth e sem circuito Blazor, então não alcança as telas do admin.
 - **Demonstração**: no Dashboard, "Criar bot de demonstração" cria o `clinica-demo` (Clínica Sorriso). O vendedor entra no portal com o próprio WhatsApp; os telefones dos leads aparecem mascarados e o Runtime limpa a demo toda madrugada (3h) ou pelo botão "Limpar demonstração". Passo a passo da demonstração no [guia](docs/GUIA-DO-PAINEL.md#demonstração-para-vendas).
 - **Produção**: sirva o painel atrás de HTTPS (`PORTAL_SECURE_COOKIES=true`). As chaves da sessão ficam em `configs/keys`.

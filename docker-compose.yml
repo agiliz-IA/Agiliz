@@ -1,7 +1,7 @@
 services:
 
   evolution-api:
-    image: atendai/evolution-api:v2.1.1
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: agiliz-evolution
     ports:
       - "8080:8080"
@@ -64,11 +64,20 @@ services:
       ANTHROPIC_API_KEY:         ${ANTHROPIC_API_KEY}
       # Rotas da Evolution v2 ficam na raiz (ex.: /message/sendText/{instancia}), sem "/api"
       Evolution__ApiUrl:         http://evolution-api:8080
-      Evolution__ApiToken:       ${EVOLUTION_API_TOKEN:-change-me-default-token}
+      # Mesma senha que a Evolution exige (AUTHENTICATION_API_KEY no .env): uma senha só para os dois
+      Evolution__ApiToken:       ${AUTHENTICATION_API_KEY:-change-me-default-token}
+      # "Gerar código de conexão" cria a instância do número e aponta o webhook para cá
+      Evolution__WebhookUrl:     http://runtime:8080/webhook
       # Protege /api/admin e /api/handoff (o painel envia o mesmo valor). Vazio = rotas desligadas.
       Runtime__AdminToken:       ${RUNTIME_ADMIN_TOKEN:-}
       # Número reserva que envia o código do portal quando o número do bot ainda não está conectado
       Portal__SenderNumber:      ${PORTAL_SENDER_NUMBER:-}
+      # E-mail enviado pelos bots (vazio = só aparece no log)
+      SMTP_HOST:                 ${SMTP_HOST:-}
+      SMTP_PORT:                 ${SMTP_PORT:-587}
+      SMTP_USER:                 ${SMTP_USER:-}
+      SMTP_PASS:                 ${SMTP_PASS:-}
+      SMTP_FROM:                 ${SMTP_FROM:-}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=evolution;Username=evolution;Password=evolution
       Database__AutoMigrate: "true"
     restart: unless-stopped
