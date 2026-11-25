@@ -249,8 +249,27 @@
 
         if (replyContext.ConfigReady && !string.IsNullOrEmpty(replyContext.JsonConfig))
         {
-            _extractedConfig = JsonSerializer.Deserialize<BotConfig>(replyContext.JsonConfig, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            GoToConfirm();
+            // Enums chegam como texto ("Monday", "Scheduling") ou número: mesmo conversor do BotConfigLoader.
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+            try
+            {
+                _extractedConfig = JsonSerializer.Deserialize<BotConfig>(replyContext.JsonConfig, options);
+            }
+            catch (JsonException)
+            {
+                _extractedConfig = null;
+                _messages.Add(new ChatMessage
+                {
+                    Role = "agent",
+                    HtmlContent = "A configuração gerada veio com um formato inválido. Peça: \"gere a configuração de novo\"."
+                });
+            }
+            if (_extractedConfig is not null)
+                GoToConfirm();
         }
 
         await Task.Delay(50);
