@@ -91,6 +91,8 @@ Tudo pelo painel, sem mexer na Evolution:
 
 O cliente também pode conectar o número sozinho pelo portal (Integrações → Conectar o WhatsApp).
 
+Se o QR não aparecer (fica carregando para sempre, inclusive no painel da própria Evolution), confira em `docker-compose.yml` se a imagem é `evoapicloud/evolution-api:v2.3.7` ou mais nova. A imagem antiga `atendai/evolution-api:v2.1.1` usa uma versão do WhatsApp Web que o WhatsApp não aceita mais. Depois de trocar: `docker compose pull evolution-api && docker compose up -d`.
+
 <details>
 <summary>Fazer à mão pela Evolution (só se o botão falhar)</summary>
 
@@ -198,7 +200,7 @@ O agente só recebe as ferramentas das integrações ligadas. Bots criados antes
 - **Propostas** (`configs/proposals/`): quiz salvo para retomar e medir conversão. "Criar bot" leva as respostas ao meta-agente e, ao salvar, aplica plano, integrações e LGPD ao bot. Guardam nome e telefone do contato do lead.
 
 ### Portal do cliente e demonstração
-- **Portal** (`/portal` no painel): página para o cliente acompanhar o bot no PC ou no celular — início com uso da franquia, conversas (assumir, responder, devolver ao bot), agenda do dia, pausar o bot, integrações do plano e conexão do número por QR code (a Evolution v2.1.1 não devolve o código de pareamento).
+- **Portal** (`/portal` no painel): página para o cliente acompanhar o bot no PC ou no celular — início com uso da franquia, conversas (assumir, responder, devolver ao bot), agenda do dia, pausar o bot, integrações do plano e conexão do número por QR code (a Evolution pode devolver só o QR, sem código de pareamento).
 - **Acesso**: o admin cadastra os WhatsApp com acesso na aba Integrações do bot (card "Portal do cliente"). O cliente entra com um código de 6 dígitos enviado pelo WhatsApp; a sessão é um cookie HttpOnly de 30 dias. O portal é uma página estática + API própria, fora do Basic Auth e sem circuito Blazor, então não alcança as telas do admin.
 - **Demonstração**: no Dashboard, "Criar bot de demonstração" cria o `clinica-demo` (Clínica Sorriso). O vendedor entra no portal com o próprio WhatsApp; os telefones dos leads aparecem mascarados e o Runtime limpa a demo toda madrugada (3h) ou pelo botão "Limpar demonstração". Passo a passo da demonstração no [guia](docs/GUIA-DO-PAINEL.md#demonstração-para-vendas).
 - **Produção**: sirva o painel atrás de HTTPS (`PORTAL_SECURE_COOKIES=true`). As chaves da sessão ficam em `configs/keys`.
