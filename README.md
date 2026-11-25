@@ -61,7 +61,7 @@ O bot de agendamento lê e grava na Google Agenda usando uma **conta de serviço
 
 1. Entre em https://console.cloud.google.com/ e crie um projeto (ex.: "agiliz").
 2. Em **APIs e serviços → Biblioteca**, ative a **Google Calendar API**.
-3. Em **IAM e administrador → Contas de serviço**, crie uma conta (ex.: "agiliz-bot"). Não precisa dar papel nenhum.
+3. Em **IAM e administrador → Contas de serviço**, crie uma conta (ex.: "agiliz-bot"). Precisa dar papel de Admin básico.
 4. Abra a conta criada → aba **Chaves** → **Adicionar chave → Criar nova chave → JSON**. Um arquivo `.json` será baixado.
 5. Na pasta do projeto, crie a pasta `configs` e salve o arquivo como **`configs/google_credentials.json`**.
 6. Para cada agenda que o bot vai usar: no Google Agenda da clínica, **Configurações da agenda → Compartilhar com pessoas específicas** → adicione o e-mail da conta de serviço (está no JSON, campo `client_email`, termina em `iam.gserviceaccount.com`) com permissão **"Fazer alterações nos eventos"**. O **ID da agenda** (em "Integrar agenda") é o que você cola no painel, na aba Integrações do bot.
