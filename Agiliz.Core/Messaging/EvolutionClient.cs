@@ -10,12 +10,15 @@ namespace Agiliz.Core.Messaging;
 /// Cliente da Evolution API v2.
 /// Lê Evolution:ApiUrl (raiz do servidor, sem "/api"), Evolution:ApiToken (header "apikey")
 /// e Evolution:UseNativeButtons (padrão false).
+/// Com Evolution:WebhookUrl preenchido, "Gerar código de conexão" também cria a instância
+/// (nome = número do bot) e aponta o webhook dela para o Runtime, sem passo manual na Evolution.
 /// </summary>
 public sealed class EvolutionClient : IMessageProvider
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiUrl;
     private readonly bool _useNativeButtons;
+    private readonly string? _webhookUrl;
 
     public EvolutionClient(IConfiguration configuration) : this(configuration, null) { }
 
@@ -29,6 +32,7 @@ public sealed class EvolutionClient : IMessageProvider
 
         _apiUrl = apiUrl.TrimEnd('/');
         _useNativeButtons = bool.TryParse(configuration["Evolution:UseNativeButtons"], out var nb) && nb;
+        _webhookUrl = string.IsNullOrWhiteSpace(configuration["Evolution:WebhookUrl"]) ? null : configuration["Evolution:WebhookUrl"]!.Trim();
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         // A Evolution API autentica pelo header "apikey" (não Bearer).
         _httpClient.DefaultRequestHeaders.Remove("apikey");
@@ -106,6 +110,12 @@ public sealed class EvolutionClient : IMessageProvider
     public async Task<WhatsAppPairingResult> RequestPairingCodeAsync(string instance, string phoneNumber, CancellationToken ct = default)
     {
         var number = NormalizeNumber(phoneNumber);
+        if (_webhookUrl is not null)
+        {
+            var prepared = await EnsureInstanceAsync(instance, ct);
+            if (prepared is not null) return new(false, null, prepared);
+        }
+
         HttpResponseMessage response;
         try
         {
@@ -142,6 +152,50 @@ public sealed class EvolutionClient : IMessageProvider
         }
     }
 
+    /// <summary>
+    /// Cria a instância se ela não existir (POST /instance/create) e aponta o webhook para o Runtime
+    /// (POST /webhook/set/{instance}). Devolve null quando deu certo, ou a mensagem de erro em português.
+    /// </summary>
+    private async Task<string?> EnsureInstanceAsync(string instance, CancellationToken ct)
+    {
+        var name = Uri.EscapeDataString(instance);
+        try
+        {
+            using (var state = await _httpClient.GetAsync($"{_apiUrl}/instance/connectionState/{name}", ct))
+            {
+                if (state.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                    return "A Evolution recusou a senha (AUTHENTICATION_API_KEY).";
+                if (state.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    var create = new { instanceName = instance, qrcode = true, integration = "WHATSAPP-BAILEYS" };
+                    using var created = await _httpClient.PostAsJsonAsync($"{_apiUrl}/instance/create", create, ct);
+                    if (!created.IsSuccessStatusCode)
+                        return $"Não deu para criar a instância na Evolution (HTTP {(int)created.StatusCode}).";
+                }
+            }
+
+            var webhook = new
+            {
+                webhook = new
+                {
+                    enabled = true,
+                    url = _webhookUrl,
+                    byEvents = false,
+                    base64 = false,
+                    events = new[] { "MESSAGES_UPSERT" }
+                }
+            };
+            using var set = await _httpClient.PostAsJsonAsync($"{_apiUrl}/webhook/set/{name}", webhook, ct);
+            return set.IsSuccessStatusCode
+                ? null
+                : $"A instância existe, mas a Evolution recusou o webhook (HTTP {(int)set.StatusCode}).";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return $"Evolution fora do ar: {ex.Message}";
+        }
+    }
+
     /// <summary>GET /instance/connectionState/{instance} → "open", "connecting" ou "close".</summary>
     public async Task<Agiliz.Core.Integrations.IntegrationTestResult> CheckConnectionAsync(string instance, CancellationToken ct = default)
     {
@@ -158,7 +212,7 @@ public sealed class EvolutionClient : IMessageProvider
         using (response)
         {
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return new(false, $"A instância \"{instance}\" não existe na Evolution. Crie com o nome igual ao número do bot.");
+                return new(false, $"A instância \"{instance}\" não existe na Evolution. Clique em \"Gerar código de conexão\" para criar.");
             if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
                 return new(false, "A Evolution recusou o token (Evolution:ApiToken).");
             if (!response.IsSuccessStatusCode)

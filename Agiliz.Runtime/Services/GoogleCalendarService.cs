@@ -20,9 +20,9 @@ public sealed class GoogleCalendarService
 
         if (!File.Exists(keyPath))
         {
+            // Sem credencial o Runtime sobe normalmente; só a agenda fica desligada
+            // ("Testar conexão" da Google Agenda explica o que falta).
             _logger.LogWarning("Arquivo google_credentials.json nao encontrado em {KeyPath}. Google Calendar offline.", keyPath);
-            if (env?.IsProduction() == true)
-                throw new InvalidOperationException($"Google Calendar credentials missing: {keyPath}");
             return;
         }
 
@@ -46,9 +46,7 @@ public sealed class GoogleCalendarService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Falha ao carregar credenciais do Google Calendar.");
-            if (env?.IsProduction() == true)
-                throw;
+            _logger.LogError(ex, "Falha ao carregar credenciais do Google Calendar. Google Calendar offline.");
         }
     }
 

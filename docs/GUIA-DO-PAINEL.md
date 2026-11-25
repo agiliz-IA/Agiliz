@@ -37,7 +37,7 @@ Botões do topo: **Novo bot** e **Criar bot de demonstração** (veja [Demonstra
 
 ### Novo bot (entrevista com a IA)
 Em vez de escrever configurações, você conversa com uma IA que monta o bot. São três passos:
-1. **Identificação**: um nome curto e único (ex.: `clinica-santos`) e o número de WhatsApp do bot, só dígitos com 55 e DDD. Tem que ser **exatamente** o mesmo nome da instância criada na Evolution.
+1. **Identificação**: um nome curto e único (ex.: `clinica-santos`) e o número de WhatsApp do bot, só dígitos com 55 e DDD.
 2. **Entrevista**: conte como é o negócio (horários, serviços, preços, tom de voz, o que o bot não pode fazer). A IA pergunta o que faltar.
 3. **Revisão**: confira as respostas automáticas e a IA escolhida, e clique em **Salvar Bot e Lançar**. O bot já começa a atender, sem reiniciar nada.
 
@@ -60,11 +60,11 @@ Abre pelo botão **Integrações** do bot. É onde se liga o que o cliente contr
 | Integração | Para que serve | O que configurar |
 |---|---|---|
 | Atendimento com IA | O bot em si. Sempre ligada. | — |
-| WhatsApp (não oficial) | O número do bot, via Evolution. | **Gerar código de conexão** mostra um QR: leia no celular do número (WhatsApp → Aparelhos conectados → Conectar um aparelho). O QR muda a cada ~40 s. Depois, **Testar conexão**. |
+| WhatsApp (não oficial) | O número do bot, via Evolution. | **Gerar código de conexão** prepara o número na Evolution sozinho e mostra um QR: leia no celular do número (WhatsApp → Aparelhos conectados → Conectar um aparelho). O QR muda a cada ~40 s. Depois, **Testar conexão**. |
 | Google Agenda | O bot consulta horários livres, marca, remarca e cancela. | O **ID da agenda** da clínica, compartilhada com o e-mail da conta de serviço (ver README, passo 3). |
 | Lembretes na véspera | O bot manda lembrete da consulta no dia anterior. | Precisa da Google Agenda. |
 | Transcrição de áudio | O bot entende áudios do paciente. | Nada além da chave do Groq. |
-| Envio de e-mail | O bot manda e-mails (ex.: confirmação). | *(não verificado)* No Docker hoje os e-mails só vão para o log: o SMTP não é repassado ao motor. |
+| Envio de e-mail | O bot manda e-mails (ex.: confirmação). | Os `SMTP_*` do `.env`. Sem eles os e-mails só aparecem no log. |
 | Transbordo para humano | O bot pausa e chama alguém da clínica quando não sabe responder ou o paciente pede. | Aparece em **Atendimentos** e no portal. |
 | WhatsApp oficial, Pix, Sistemas de clínica | Sob consulta / em breve. | Ainda não funcionam. |
 
@@ -110,7 +110,7 @@ O portal **não** dá acesso ao painel admin nem aos custos internos.
 
 Serve para mostrar o bot funcionando numa reunião, com uma clínica fictícia ("Clínica Sorriso").
 
-1. Tenha um número (chip) para a demonstração e crie a instância dele na Evolution com o webhook (README, passo 5).
+1. Tenha um número (chip) para a demonstração.
 2. No Dashboard, **Criar bot de demonstração**: informe o número do chip e os WhatsApp dos vendedores (separados por vírgula).
 3. O painel abre as Integrações do `clinica-demo`. Conecte o WhatsApp pelo QR e informe o **ID de uma Google Agenda de exemplo** (crie uma agenda só para isso e compartilhe com a conta de serviço).
 4. Na reunião, o lead manda mensagem para o chip e marca uma consulta. O vendedor mostra tudo acontecendo no **portal**, entrando com o próprio WhatsApp. Os telefones dos leads aparecem mascarados.
@@ -124,9 +124,9 @@ Se o chip for um número pessoal, preencha *Responder só a estes números* para
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
-| `agiliz-runtime` reinicia sem parar | Falta `configs/google_credentials.json`, ou `EVOLUTION_API_TOKEN` vazio/começando com `change-me`. | `docker compose logs runtime --tail 50` mostra qual. Corrija e `docker compose up -d`. |
-| Bot não responde no WhatsApp | Número do bot diferente do nome da instância, webhook não configurado, WhatsApp desconectado, ou chave do Groq errada. | Integrações do bot → **Testar conexão** em WhatsApp e IA. |
-| "Testar conexão" do WhatsApp dá erro de senha | `AUTHENTICATION_API_KEY` e `EVOLUTION_API_TOKEN` diferentes. | Deixe iguais e `docker compose up -d`. |
+| `agiliz-runtime` reinicia sem parar | `AUTHENTICATION_API_KEY` vazio ou começando com `change-me`. | `docker compose logs runtime --tail 50` mostra o motivo. Corrija e `docker compose up -d`. |
+| Bot não responde no WhatsApp | WhatsApp desconectado ou chave do Groq errada. | Integrações do bot → **Testar conexão** em WhatsApp e IA. Se o WhatsApp caiu, **Gerar código de conexão** de novo (isso também religa o webhook). |
+| Bot não marca na agenda | Falta `configs/google_credentials.json` ou a agenda não foi compartilhada com a conta de serviço. | Integrações do bot → Google Agenda → **Testar conexão** diz qual. |
 | Atendimentos/Financeiro vazios ou com erro | `RUNTIME_ADMIN_TOKEN` vazio. | Preencha e `docker compose up -d`. |
 | Código do portal não chega | Número do bot não conectado e `PORTAL_SENDER_NUMBER` vazio. | Conecte o número ou preencha o reserva. |
 | Login do portal volta para a tela de código | Cookie seguro em http sem HTTPS *(não verificado)*. | Use o endereço do ngrok, ou `PORTAL_SECURE_COOKIES=false` só para teste local. |
