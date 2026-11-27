@@ -6,12 +6,12 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agiliz — Wizard</title>
+    <title>Agiliz · Painel</title>
     <!-- Sem base, rotas com subcaminho (/edit/x, /bots/x/integrations) buscam app.css e blazor.web.js no lugar errado -->
     <base href="/" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     
     <!-- Base styles that stay global -->
     <link href="app.css" rel="stylesheet" />
@@ -20,7 +20,7 @@
     <HeadOutlet />
 </head>
 <body>
-    <Routes @rendermode="RenderMode.InteractiveServer" />
+    <Routes @rendermode="RenderMode.InteractiveServer" AccountId="@(HttpContext?.Items[Agiliz.Wizard.Accounts.PainelAccess.AccountKey] as string)" />
     
     <script src="_framework/blazor.web.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@@emailjs/browser@4/dist/email.min.js"></script>
@@ -55,3 +55,8 @@
     </div>
 </body>
 </html>
+
+@code {
+    // Só existe na renderização inicial (HTTP); o id da conta segue para o circuito como parâmetro protegido.
+    [CascadingParameter] public HttpContext? HttpContext { get; set; }
+}

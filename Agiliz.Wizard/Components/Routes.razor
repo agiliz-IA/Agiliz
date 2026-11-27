@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Components.Routing
 @using Agiliz.Wizard.Components.Templates
 
+<CascadingValue Value="_user" IsFixed="true">
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
@@ -13,3 +14,14 @@
         </LayoutView>
     </NotFound>
 </Router>
+</CascadingValue>
+
+@code {
+    [Parameter] public string? AccountId { get; set; }
+    [Inject] private Agiliz.Wizard.Accounts.AccountStore Accounts { get; set; } = default!;
+
+    private Agiliz.Wizard.Accounts.PainelUser _user = new(null);
+
+    protected override void OnParametersSet() =>
+        _user = new(Accounts.Find(AccountId));
+}

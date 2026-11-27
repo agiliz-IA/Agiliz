@@ -31,5 +31,5 @@
   resize: vertical;
 }
 
-.form-input:focus { border-color: var(--accent); }
+.form-input:focus { border-color: var(--lilac); }
 .form-input::placeholder { color: var(--text-3); }

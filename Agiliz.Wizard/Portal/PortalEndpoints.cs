@@ -1,22 +1,21 @@
 using Agiliz.Core.Integrations;
 using Agiliz.Core.Models;
 using Agiliz.Core.Plans;
+using Agiliz.Wizard.Accounts;
 using Agiliz.Wizard.Services;
 
 namespace Agiliz.Wizard.Portal;
 
 /// <summary>
-/// API do portal do cliente (/portal/api). Fica fora do Basic Auth do admin e tem login próprio
-/// (código pelo WhatsApp + cookie HttpOnly). Toda rota com {tenantId} confere se o telefone logado
-/// tem acesso àquele bot; se não tiver, responde 404 (não revela que o bot existe).
+/// API do portal do cliente (/portal/api). Fica fora do Basic Auth do admin; a sessão vem da entrada única (/entrar).
+/// Toda rota com {tenantId} confere se a conta logada tem acesso àquele bot; se não tiver, responde 404
+/// (não revela que o bot existe).
 /// </summary>
 public static class PortalEndpoints
 {
     public const string CsrfHeader = "X-Agiliz-Portal";
     public const string LoginRateLimit = "portal-login";
 
-    public sealed record StartRequest(string? Phone);
-    public sealed record VerifyRequest(string? Phone, string? Code);
     public sealed record ReplyRequest(string? Body);
     public sealed record PauseRequest(bool Paused);
     public sealed record ToggleRequest(bool Enabled);
@@ -27,22 +26,25 @@ public static class PortalEndpoints
     {
         var api = app.MapGroup("/portal/api").DisableAntiforgery();
 
-        api.MapPost("/login/start", StartAsync).RequireRateLimiting(LoginRateLimit);
-        api.MapPost("/login/verify", Verify).RequireRateLimiting(LoginRateLimit);
+        // Login agora é na entrada única (/entrar); estas rotas antigas só avisam para onde ir.
+        api.MapPost("/login/start", () => Results.Json(new { error = "O login mudou: entre por /entrar." }, statusCode: StatusCodes.Status410Gone));
+        api.MapPost("/login/verify", () => Results.Json(new { error = "O login mudou: entre por /entrar." }, statusCode: StatusCodes.Status410Gone));
         api.MapPost("/logout", (HttpContext http) =>
         {
-            http.Response.Cookies.Delete(PortalAuthService.CookieName, new CookieOptions { Path = "/portal" });
+            AuthService.SignOut(http);
+            http.Response.Cookies.Delete("agiliz_portal", new CookieOptions { Path = "/portal" });
             return Results.NoContent();
         });
 
         var session = api.MapGroup("").AddEndpointFilter<PortalSessionFilter>();
-        session.MapGet("/me", (HttpContext http, PortalAuthService auth) =>
+        session.MapGet("/me", (HttpContext http, AuthService auth) =>
         {
-            var phone = PortalSessionFilter.Phone(http);
+            var account = PortalSessionFilter.Account(http);
             return Results.Ok(new
             {
-                phone = PortalAuthService.DisplayPhone(phone, mask: false),
-                bots = auth.BotsFor(phone).Select(b => new { b.TenantId, name = Name(b), b.Type, b.IsDemo, b.Paused })
+                name = account.Name,
+                staff = account.IsStaff,
+                bots = auth.BotsFor(account).Select(b => new { b.TenantId, name = Name(b), b.Type, b.IsDemo, b.Paused })
             });
         });
 
@@ -78,34 +80,6 @@ public static class PortalEndpoints
                 ? Results.NoContent()
                 : Results.Problem("Não foi possível limpar a demonstração agora.", statusCode: StatusCodes.Status502BadGateway);
         });
-    }
-
-    // ─── Login ────────────────────────────────────────────────────────────────
-
-    private static async Task<IResult> StartAsync(StartRequest body, PortalAuthService auth, CancellationToken ct) =>
-        await auth.StartAsync(body.Phone, ct) switch
-        {
-            // Telefone desconhecido recebe a mesma resposta: não dá para descobrir quem é cliente.
-            PortalLoginStart.Sent or PortalLoginStart.UnknownPhone =>
-                Results.Ok(new { message = "Se este número tiver acesso, o código chega no WhatsApp em instantes." }),
-            PortalLoginStart.TooSoon => Results.Json(new { error = "Aguarde um minuto para pedir outro código." }, statusCode: StatusCodes.Status429TooManyRequests),
-            _ => Results.Json(new { error = "Não conseguimos enviar o código agora. Tente de novo em alguns minutos." }, statusCode: StatusCodes.Status502BadGateway)
-        };
-
-    private static IResult Verify(VerifyRequest body, HttpContext http, PortalAuthService auth, IConfiguration config)
-    {
-        var token = auth.Verify(body.Phone, body.Code?.Trim());
-        if (token is null) return Results.BadRequest(new { error = "Código inválido ou expirado." });
-
-        http.Response.Cookies.Append(PortalAuthService.CookieName, token, new CookieOptions
-        {
-            HttpOnly = true,
-            SameSite = SameSiteMode.Strict,
-            Secure = http.Request.IsHttps || config.GetValue("Portal:SecureCookies", false),
-            Path = "/portal",
-            MaxAge = PortalAuthService.SessionLifetime
-        });
-        return Results.NoContent();
     }
 
     // ─── Início ───────────────────────────────────────────────────────────────
@@ -336,15 +310,15 @@ public static class PortalEndpoints
 }
 
 /// <summary>
-/// Exige a sessão do portal; em rotas com {tenantId}, exige acesso àquele bot (senão 404).
-/// Requisições que mudam algo precisam do header <see cref="PortalEndpoints.CsrfHeader"/> (proteção contra CSRF).
+/// Exige a sessão (entrada única, cookie <see cref="AuthService.CookieName"/>); em rotas com {tenantId}, exige acesso
+/// àquele bot (senão 404). Requisições que mudam algo precisam do header <see cref="PortalEndpoints.CsrfHeader"/> (CSRF).
 /// </summary>
-public sealed class PortalSessionFilter(PortalAuthService auth) : IEndpointFilter
+public sealed class PortalSessionFilter(AuthService auth) : IEndpointFilter
 {
-    private const string PhoneKey = "portal.phone";
+    private const string AccountKey = "portal.account";
     private const string BotKey = "portal.bot";
 
-    public static string Phone(HttpContext http) => (string)http.Items[PhoneKey]!;
+    public static Account Account(HttpContext http) => (Account)http.Items[AccountKey]!;
     public static BotConfig Bot(HttpContext http) => (BotConfig)http.Items[BotKey]!;
 
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -353,13 +327,12 @@ public sealed class PortalSessionFilter(PortalAuthService auth) : IEndpointFilte
         if (!HttpMethods.IsGet(http.Request.Method) && http.Request.Headers[PortalEndpoints.CsrfHeader] != "1")
             return Results.BadRequest(new { error = "Requisição inválida." });
 
-        var phone = auth.ReadSession(http.Request.Cookies[PortalAuthService.CookieName]);
-        if (phone is null) return Results.Unauthorized();
-        http.Items[PhoneKey] = phone;
+        if (auth.ReadSession(http.Request.Cookies[AuthService.CookieName]) is not { } account) return Results.Unauthorized();
+        http.Items[AccountKey] = account;
 
         if (http.Request.RouteValues.TryGetValue("tenantId", out var raw) && raw is string tenantId)
         {
-            if (auth.BotFor(phone, tenantId) is not { } bot) return Results.NotFound();
+            if (auth.BotFor(account, tenantId) is not { } bot) return Results.NotFound();
             http.Items[BotKey] = bot;
         }
 

@@ -1,0 +1,379 @@
+@page "/acessos"
+@using Agiliz.Wizard.Accounts
+@using Agiliz.Wizard.Services
+@inject AccountStore Accounts
+@inject AccessService Access
+@inject AuthService Auth
+@inject BotIntegrationService Bots
+@inject RuntimeApiClient Runtime
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<PageTitle>Acessos · Agiliz</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Acessos</h1>
+        <div class="page-sub">Quem entra no painel e no portal. Tirar um acesso vale na hora.</div>
+    </div>
+    <AgilizButton Variant="primary" Small="true" OnClick="OpenInvite">+ Convidar</AgilizButton>
+</div>
+
+<div class="wizard-content">
+    @if (User.Account is null)
+    {
+        <div class="form-card access-warning">
+            Você entrou com a senha de emergência do painel. Convide a si mesmo como <strong>Admin</strong> e abra o link do convite:
+            a partir daí o painel passa a usar a tela de entrada e a senha de emergência para de valer.
+        </div>
+    }
+
+    @if (User.IsAdmin)
+    {
+        <div class="form-card sender-card">
+            <div class="sender-text">
+                <div class="sender-title">Número oficial da Agiliz</div>
+                <div class="sender-sub">De onde saem os códigos de acesso e os convites. @_senderStatus</div>
+                @if (_pairing is not null)
+                {
+                    <div class="sender-pairing">@_pairing</div>
+                }
+                @if (_qr is not null)
+                {
+                    <img class="sender-qr" src="@_qr" alt="QR code para conectar o número oficial (WhatsApp → Aparelhos conectados → Conectar aparelho)" />
+                }
+            </div>
+            <div class="sender-actions">
+                <AgilizButton Variant="ghost" Small="true" OnClick="CheckSenderAsync">Testar</AgilizButton>
+                <AgilizButton Variant="ghost" Small="true" OnClick="PairSenderAsync">Gerar código de conexão</AgilizButton>
+            </div>
+        </div>
+    }
+
+    <div class="access-filters" role="group" aria-label="Filtrar">
+        @foreach (var f in Filters)
+        {
+            <button class="filter-pill @(_filter == f.Key ? "active" : "")" @onclick="() => _filter = f.Key">@f.Label · @Count(f.Key)</button>
+        }
+    </div>
+
+    <div class="access-table" role="table" aria-label="Pessoas com acesso">
+        <div class="access-row access-head" role="row">
+            <span role="columnheader">Pessoa</span><span role="columnheader">Formas de entrar</span><span role="columnheader">Acesso</span><span role="columnheader">Último acesso</span><span role="columnheader"><span class="sr-only">Ações</span></span>
+        </div>
+        @foreach (var a in Visible())
+        {
+            var bots = Auth.BotsFor(a);
+            <div class="access-row" role="row" @key="a.Id">
+                <span class="access-name" role="cell">@a.Name</span>
+                <span class="access-muted" role="cell">@string.Join(", ", a.Identities.Select(AuthService.Display))</span>
+                <span role="cell" class="access-tags">
+                    @if (a.Role is { } role)
+                    {
+                        <span class="tag @(role == StaffRole.Admin ? "tag-admin" : "tag-seller")">@(role == StaffRole.Admin ? "Admin" : "Vendedor")</span>
+                    }
+                    @if (bots.Count > 0)
+                    {
+                        <span class="tag" title="@string.Join(", ", bots.Select(b => b.DisplayName ?? b.TenantId))">Cliente · @bots.Count @(bots.Count == 1 ? "bot" : "bots")</span>
+                    }
+                </span>
+                <span class="access-muted" role="cell">@LastSeen(a)</span>
+                <span class="access-actions" role="cell">
+                    @if (CanManage(a))
+                    {
+                        @if (a.LastLoginAt is null)
+                        {
+                            <button class="link-btn" @onclick="() => ResendAsync(a.Id)">Reenviar convite</button>
+                        }
+                        <button class="link-btn" @onclick="() => OpenEdit(a)">Editar</button>
+                    }
+                </span>
+            </div>
+        }
+        @if (!Visible().Any())
+        {
+            <div class="access-empty">Ninguém por aqui ainda.</div>
+        }
+    </div>
+</div>
+
+@if (_inviteOpen)
+{
+    <div class="modal-backdrop">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+            @if (_result is { } done)
+            {
+                <h2 id="invite-title" class="modal-title">Convite criado</h2>
+                <p class="modal-sub">
+                    @if (done.SentTo is { Count: > 0 } sent)
+                    {
+                        <text>Mandamos para @string.Join(" e ", sent). </text>
+                    }
+                    else
+                    {
+                        <text>Não conseguimos mandar sozinhos (WhatsApp oficial desconectado ou e-mail não configurado). Copie o link e mande você. </text>
+                    }
+                    O link entra direto, vale por 7 dias e só funciona uma vez.
+                </p>
+                <div class="invite-link">
+                    <input readonly value="@done.Link" aria-label="Link do convite" />
+                    <AgilizButton Variant="ghost" Small="true" OnClick="CopyLinkAsync">Copiar</AgilizButton>
+                </div>
+                <div class="modal-actions">
+                    <AgilizButton Variant="primary" OnClick="CloseModal">Pronto</AgilizButton>
+                </div>
+            }
+            else
+            {
+                <h2 id="invite-title" class="modal-title">@(_editingId is null ? "Convidar pessoa" : "Editar acesso")</h2>
+                @if (_editingId is null)
+                {
+                    <p class="modal-sub">Ela recebe um link que entra direto, sem código. Vale por 7 dias.</p>
+                }
+
+                <div class="field">
+                    <span class="field-label">Tipo de acesso</span>
+                    <div class="kind-grid">
+                        <button class="kind @(_kind == "cliente" ? "active" : "")" @onclick='() => _kind = "cliente"'>Cliente</button>
+                        @if (User.IsAdmin)
+                        {
+                            <button class="kind @(_kind == "vendedor" ? "active" : "")" @onclick='() => _kind = "vendedor"'>Vendedor</button>
+                            <button class="kind @(_kind == "admin" ? "active" : "")" @onclick='() => _kind = "admin"'>Admin</button>
+                        }
+                    </div>
+                </div>
+
+                <label class="field">
+                    <span class="field-label">Nome</span>
+                    <input class="field-input" @bind="_name" placeholder="ex.: Dra. Paula" />
+                </label>
+
+                @if (_editingId is null)
+                {
+                    <label class="field">
+                        <span class="field-label">WhatsApp e/ou e-mail</span>
+                        <input class="field-input" @bind="_identifiers" placeholder="(11) 97777-1234, paula@clinica.com.br" />
+                    </label>
+                }
+
+                <div class="field">
+                    <span class="field-label">@(_kind == "cliente" ? "Bots que ela vê no portal" : "Também é cliente? Bots que vê no portal (opcional)")</span>
+                    <div class="bot-list">
+                        @foreach (var bot in Bots.Bots().Values.OrderBy(b => b.DisplayName ?? b.TenantId))
+                        {
+                            <label class="bot-option">
+                                <input type="checkbox" checked="@_bots.Contains(bot.TenantId)" @onchange="e => ToggleBot(bot.TenantId, (bool)e.Value!)" />
+                                @(bot.DisplayName ?? bot.TenantId)@(bot.IsDemo ? " (demonstração)" : "")
+                            </label>
+                        }
+                        @if (Bots.Bots().Count == 0)
+                        {
+                            <span class="access-muted">Nenhum bot criado ainda.</span>
+                        }
+                    </div>
+                </div>
+
+                @if (_error is not null)
+                {
+                    <div class="modal-error" role="alert">@_error</div>
+                }
+
+                <div class="modal-actions">
+                    @if (_editingId is not null && CanRevoke)
+                    {
+                        @if (_confirmRevoke)
+                        {
+                            <AgilizButton Variant="danger" OnClick="RevokeAsync" Disabled="_busy">Confirmar: tirar acesso</AgilizButton>
+                        }
+                        else
+                        {
+                            <AgilizButton Variant="ghost" OnClick="() => _confirmRevoke = true">Tirar acesso</AgilizButton>
+                        }
+                        <span class="spacer"></span>
+                    }
+                    <AgilizButton Variant="ghost" OnClick="CloseModal">Cancelar</AgilizButton>
+                    <AgilizButton Variant="primary" OnClick="SaveAsync" Disabled="_busy">@(_editingId is null ? "Enviar convite" : "Salvar")</AgilizButton>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] public PainelUser User { get; set; } = new(null);
+
+    private static readonly (string Key, string Label)[] Filters = [("todos", "Todos"), ("equipe", "Equipe"), ("clientes", "Clientes"), ("pendentes", "Convites pendentes")];
+
+    private string _filter = "todos";
+    private IReadOnlyList<Account> _accounts = [];
+    private string? _senderStatus;
+    private string? _pairing;
+    private string? _qr;
+
+    private bool _inviteOpen;
+    private string? _editingId;
+    private string _kind = "cliente";
+    private string _name = "";
+    private string _identifiers = "";
+    private HashSet<string> _bots = new(StringComparer.OrdinalIgnoreCase);
+    private string? _error;
+    private bool _busy;
+    private bool _confirmRevoke;
+    private InviteOutcome? _result;
+
+    protected override void OnInitialized()
+    {
+        Access.ImportLegacyPortalPhones();
+        Reload();
+    }
+
+    private void Reload() => _accounts = Accounts.All().OrderBy(a => a.Role is null ? 1 : 0).ThenBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    private IEnumerable<Account> Visible() => _accounts.Where(a => _filter switch
+    {
+        "equipe" => a.IsStaff,
+        "clientes" => Auth.BotsFor(a).Count > 0,
+        "pendentes" => a.LastLoginAt is null,
+        _ => true
+    });
+
+    private int Count(string key) { var keep = _filter; _filter = key; var n = Visible().Count(); _filter = keep; return n; }
+
+    private bool CanManage(Account a) => User.IsAdmin || !a.IsStaff;
+
+    private bool CanRevoke => _editingId != User.Account?.Id;
+
+    private static string LastSeen(Account a)
+    {
+        if (a.LastLoginAt is { } last) return Ago(last);
+        if (a.Invite is { } invite)
+            return invite.ExpiresAt < DateTimeOffset.UtcNow ? "convite vencido" : $"convite vence em {Math.Max(1, (int)Math.Ceiling((invite.ExpiresAt - DateTimeOffset.UtcNow).TotalDays))} dia(s)";
+        return "nunca entrou";
+    }
+
+    private static string Ago(DateTimeOffset when)
+    {
+        var span = DateTimeOffset.UtcNow - when;
+        if (span.TotalMinutes < 5) return "agora";
+        if (span.TotalHours < 1) return $"há {(int)span.TotalMinutes} min";
+        if (span.TotalDays < 1) return $"há {(int)span.TotalHours} h";
+        if (span.TotalDays < 2) return "ontem";
+        return $"há {(int)span.TotalDays} dias";
+    }
+
+    private void OpenInvite()
+    {
+        _editingId = null;
+        _kind = "cliente";
+        _name = _identifiers = "";
+        _bots.Clear();
+        ResetModal();
+    }
+
+    private void OpenEdit(Account a)
+    {
+        _editingId = a.Id;
+        _kind = a.Role switch { StaffRole.Admin => "admin", StaffRole.Vendedor => "vendedor", _ => "cliente" };
+        _name = a.Name;
+        _bots = new HashSet<string>(Auth.BotsFor(a).Select(b => b.TenantId), StringComparer.OrdinalIgnoreCase);
+        ResetModal();
+    }
+
+    private void ResetModal()
+    {
+        _error = null;
+        _result = null;
+        _busy = false;
+        _confirmRevoke = false;
+        _inviteOpen = true;
+    }
+
+    private void CloseModal()
+    {
+        _inviteOpen = false;
+        Reload();
+    }
+
+    private void ToggleBot(string tenantId, bool on)
+    {
+        if (on) _bots.Add(tenantId); else _bots.Remove(tenantId);
+    }
+
+    private StaffRole? Role => _kind switch { "admin" => StaffRole.Admin, "vendedor" => StaffRole.Vendedor, _ => null };
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        if (_editingId is null)
+        {
+            var outcome = await Access.InviteAsync(new InviteRequest(_name, Role, _identifiers, _bots.ToList()), User, NavManager.BaseUri);
+            if (outcome.Ok) _result = outcome; else _error = outcome.Error;
+        }
+        else
+        {
+            _error = await Access.UpdateAsync(_editingId, _name, Role, _bots.ToList(), User);
+            if (_error is null)
+            {
+                await JS.InvokeVoidAsync("toast", "Acesso salvo.", "success");
+                CloseModal();
+            }
+        }
+        _busy = false;
+    }
+
+    private async Task RevokeAsync()
+    {
+        _busy = true;
+        _error = await Access.RevokeAsync(_editingId!, User);
+        _busy = false;
+        if (_error is null)
+        {
+            await JS.InvokeVoidAsync("toast", "Acesso removido.", "success");
+            CloseModal();
+        }
+    }
+
+    private async Task ResendAsync(string id)
+    {
+        var outcome = await Access.SendInviteAsync(id, NavManager.BaseUri);
+        if (!outcome.Ok)
+        {
+            await JS.InvokeVoidAsync("toast", outcome.Error, "error");
+            return;
+        }
+        _editingId = id;
+        ResetModal();
+        _result = outcome;
+    }
+
+    private async Task CopyLinkAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _result?.Link ?? "");
+            await JS.InvokeVoidAsync("toast", "Link copiado.", "success");
+        }
+        catch (JSException)
+        {
+            await JS.InvokeVoidAsync("toast", "Não deu para copiar. Selecione o link e copie à mão.", "error");
+        }
+    }
+
+    private async Task CheckSenderAsync()
+    {
+        _senderStatus = "Testando…";
+        var result = await Runtime.SenderStatusAsync();
+        _senderStatus = result.Ok ? "Conectado." : result.Message;
+    }
+
+    private async Task PairSenderAsync()
+    {
+        _pairing = "Gerando…";
+        var result = await Runtime.SenderPairingAsync();
+        _qr = result.QrCodeDataUrl;
+        _pairing = result.Ok && result.PairingCode is { } code
+            ? $"No celular do número oficial: WhatsApp → Aparelhos conectados → Conectar com número de telefone → digite {code}"
+            : result.Message;
+    }
+}

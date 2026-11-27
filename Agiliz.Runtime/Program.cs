@@ -109,6 +109,7 @@ if (app.Configuration.GetValue("Database:AutoMigrate", false))
 WhatsAppWebhook.Map(app);
 AdminEndpoints.Map(app);
 TenantEndpoints.Map(app);
+SenderEndpoints.Map(app);
 
 app.MapGet("/health", () => Results.Ok(new
 {

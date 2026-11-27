@@ -30,5 +30,5 @@
   transition: border-color 0.15s;
 }
 
-.form-input:focus { border-color: var(--accent); }
+.form-input:focus { border-color: var(--lilac); }
 .form-input::placeholder { color: var(--text-3); }

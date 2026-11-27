@@ -1,22 +1,26 @@
 :root {
-  --bg:        #0C0E14;
-  --surface:   #13161E;
-  --surface-2: #1A1E28;
-  --border:    #252836;
-  --border-2:  #303548;
-  --accent:    #7C5CFC;
-  --accent-dim:#4B38A8;
+  /* Tema Agiliz: preto, roxo e lilás (o mesmo da tela de entrada) */
+  --bg:        #0B0A10;
+  --surface:   #15121D;
+  --surface-2: #1E1929;
+  --border:    #2E2640;
+  --border-2:  #3B3152;
+  --accent:    #7C3AED;
+  --accent-dim:#5B21B6;
+  --accent-soft: rgba(139,92,246,0.16);
+  --lilac:     #C4B5FD;
   --teal:      #10B981;
   --teal-dim:  #065F46;
   --red:       #EF4444;
   --yellow:    #F59E0B;
-  --text:      #E8EAF0;
-  --text-2:    #8890A4;
-  --text-3:    #525869;
+  --text:      #F4F1FA;
+  --text-2:    #B8AFCB;
+  --text-3:    #8C82A3;
   --mono:      'IBM Plex Mono', monospace;
-  --sans:      'IBM Plex Sans', sans-serif;
-  --radius:    6px;
-  --radius-lg: 10px;
+  --sans:      'Inter', system-ui, sans-serif;
+  --display:   'Space Grotesk', 'Inter', sans-serif;
+  --radius:    8px;
+  --radius-lg: 12px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,9 +68,12 @@ body {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+h1:focus { outline: none; } /* FocusOnNavigate põe o foco no título a cada troca de tela */
+
 .page-title {
-  font-family: var(--mono);
-  font-size: 16px;
+  font-family: var(--display);
+  font-size: 20px;
+  letter-spacing: -0.01em;
   font-weight: 600;
   color: var(--text);
 }

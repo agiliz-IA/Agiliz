@@ -39,10 +39,11 @@ public sealed class RuntimeTenantTests : IDisposable
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "demo", whatsappNumber: "5521900000012") with { IsDemo = true });
     }
 
-    private WebApplicationFactory<Runtime.Program> BuildFactory() =>
+    private WebApplicationFactory<Runtime.Program> BuildFactory(string? senderNumber = null) =>
         new WebApplicationFactory<Runtime.Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("ConfigsDir", _dir.Path);
+            if (senderNumber is not null) b.UseSetting("Portal:SenderNumber", senderNumber);
             b.UseSetting("Runtime:AdminToken", Token);
             b.ConfigureServices(services =>
             {
@@ -167,6 +168,36 @@ public sealed class RuntimeTenantTests : IDisposable
 
         (await client.PostAsJsonAsync("/api/admin/tenants/clinica/portal-code", new { phone = "5521911110007", code = "12ab" }))
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task AccessMessage_GoesFromOfficialNumber_WhenConfigured()
+    {
+        using var factory = BuildFactory(senderNumber: "5521955550000");
+        var client = Client(factory);
+
+        (await client.PostAsJsonAsync("/api/admin/sender/notify", new { phone = "5521911110007", text = "código 123456", tenantId = "clinica" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        _provider.Sent.Should().ContainSingle(m => m.From == "5521955550000" && m.To == "5521911110007");
+    }
+
+    [Fact]
+    public async Task AccessMessage_FallsBackToBotNumber_AndNeverSendsToItself()
+    {
+        using var factory = BuildFactory();
+        var client = Client(factory);
+
+        (await client.PostAsJsonAsync("/api/admin/sender/notify", new { phone = "5521911110007", text = "código 123456", tenantId = "clinica" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        _provider.Sent.Should().ContainSingle(m => m.From == "5521900000010");
+
+        // Demonstração no celular de quem testa: o bot é o próprio número, então não há de onde mandar.
+        (await client.PostAsJsonAsync("/api/admin/sender/notify", new { phone = "5521900000010", text = "código 123456", tenantId = "clinica" }))
+            .StatusCode.Should().Be(HttpStatusCode.BadGateway);
+        (await client.PostAsJsonAsync("/api/admin/sender/notify", new { phone = "5521911110007", text = "código 123456" }))
+            .StatusCode.Should().Be(HttpStatusCode.BadGateway, "sem número oficial e sem bot, não há remetente");
+        _provider.Sent.Should().HaveCount(1);
     }
 
     [Fact]

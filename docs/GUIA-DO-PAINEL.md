@@ -2,6 +2,7 @@
 
 Este guia explica, sem termos técnicos, o que cada tela do Agiliz faz e quando usar. Para instalar e subir o projeto, veja o [README](../README.md).
 
+- **Entrada:** http://localhost:5001/entrar — a mesma tela para a equipe e para os clientes. Depois de entrar, cada um vai para o lugar certo.
 - **Painel (admin):** http://localhost:5001 — uso interno da Agiliz (criar bots, vender, acompanhar custos).
 - **Portal do cliente:** http://localhost:5001/portal — o que o dono da clínica usa.
 
@@ -14,15 +15,29 @@ Este guia explica, sem termos técnicos, o que cada tela do Agiliz faz e quando 
 1. **Quiz de venda** com o cliente, na reunião → gera uma **Proposta** com plano e preço.
 2. Na proposta, **Criar bot** → a entrevista com a IA monta o bot.
 3. **Testar** o bot no simulador.
-4. **Integrações do bot**: plano, Google Agenda, conectar o WhatsApp, liberar o portal.
-5. O cliente entra no **Portal** e acompanha tudo pelo celular.
+4. **Integrações do bot**: plano, Google Agenda, conectar o WhatsApp.
+5. **Acessos → Convidar**: o cliente recebe um link no WhatsApp ou e-mail, entra e acompanha tudo pelo **Portal**, no celular ou no PC.
 6. No dia a dia: **Atendimentos** (quando o bot passa para humano) e **Financeiro** (custo × preço).
 
 ---
 
 ## Painel (admin)
 
-O navegador pede usuário e senha: são `WIZARD_ADMIN_USER` e `WIZARD_ADMIN_PASSWORD` do `.env`.
+### Entrar
+
+Ninguém tem senha. Cada pessoa tem **uma conta** e pode entrar por qualquer uma das formas guardadas nela: **WhatsApp** (recebe um código de 6 dígitos), **e-mail** (recebe o código) ou **Google** (um clique). Fica logada 30 dias no mesmo aparelho. Na primeira vez, a tela sugere adicionar outra forma de entrar, para não ficar trancado para fora se trocar de celular.
+
+**Primeira vez (montar a equipe):** enquanto ninguém é Admin, o navegador pede a senha de emergência (`WIZARD_ADMIN_USER` e `WIZARD_ADMIN_PASSWORD` do `.env`). Entre com ela, vá em **Acessos → Convidar**, escolha **Admin** e coloque o seu WhatsApp e/ou e-mail. Abra o link do convite: a partir daí o painel só abre pela tela de entrada e a senha de emergência para de valer.
+
+Se o código não chegar, a tela oferece mandar por e-mail, entrar com Google ou corrigir o número. Se o número não tem acesso, a tela diz isso (antes ela fingia que tinha mandado).
+
+### Acessos
+Quem entra no painel e no portal. **Convidar** cria a conta e manda um link que entra direto (vale 7 dias, uma vez só); se não der para mandar sozinho, o link aparece para copiar. Tipos de acesso:
+- **Admin**: tudo.
+- **Vendedor**: tudo menos **Financeiro** e **Telemetria**; só convida e edita clientes.
+- **Cliente**: só o portal, e só os bots marcados.
+
+**Editar** muda nome, tipo e bots; **Tirar acesso** vale na hora. No topo fica o **Número oficial da Agiliz** (`PORTAL_SENDER_NUMBER`): de onde saem os códigos e convites. **Gerar código de conexão** conecta esse número como se fosse um aparelho do WhatsApp.
 
 ### Dashboard (bots ativos)
 A tela inicial. Lista todos os bots com o número de WhatsApp e a IA que usam, e avisa quando um cliente passou de 80% ou 100% da franquia do mês (o atendimento **nunca** é bloqueado, é só um aviso para cobrar o excedente ou subir de plano).
@@ -52,7 +67,7 @@ Abre pelo botão **Integrações** do bot. É onde se liga o que o cliente contr
 - **Plano** e **Preço negociado (R$/mês)**: qual plano o cliente comprou e, se teve desconto, o preço real. Usado no Financeiro para calcular a margem.
 - **Portal do cliente**:
   - *Nome no portal*: como o bot aparece para o cliente.
-  - *WhatsApp com acesso*: os números que podem entrar no portal (um por linha). Tirar um número corta o acesso na hora.
+  - *WhatsApp com acesso*: números que podem entrar no portal (um por linha). Continua funcionando, mas o jeito novo é **Acessos → Convidar**, que também aceita e-mail e vários bots.
   - *Responder só a estes números*: deixe **vazio** para atender todo mundo. Preencha só quando o bot estiver num número pessoal (ex.: demonstração), para ele não responder seus contatos.
   - **Abrir portal ↗**: abre o portal para conferir.
 - **Cada integração** tem um interruptor, campos, os "passos do cliente" (o que pedir para ele), **Testar conexão** e o preço mensal cobrado. As principais:
@@ -95,7 +110,7 @@ Telas antigas de teste de e-mail: a Telemetria lista os e-mails enviados pelos b
 
 Endereço: `/portal` (ex.: http://localhost:5001/portal ou o endereço do ngrok + `/portal`). Funciona no PC e no celular.
 
-**Login:** o cliente digita o WhatsApp dele, recebe um **código de 6 dígitos** no WhatsApp e digita no portal. Fica logado por 30 dias. Só entra quem está em *WhatsApp com acesso* nas Integrações do bot. O código sai pelo número do bot; se ele ainda não estiver conectado, sai pelo `PORTAL_SENDER_NUMBER` do `.env`.
+**Login:** pela tela de entrada (`/entrar`), com WhatsApp, e-mail ou Google (veja "Entrar" acima). Só entra quem foi convidado em **Acessos** ou está em *WhatsApp com acesso* nas Integrações do bot. O código sai pelo número oficial da Agiliz (`PORTAL_SENDER_NUMBER`); se ele não estiver configurado, sai pelo número do bot. Em **Conta** o cliente adiciona ou remove formas de entrar e sai de todos os aparelhos.
 
 O portal **não** dá acesso ao painel admin nem aos custos internos.
 
@@ -128,5 +143,7 @@ Se o chip for um número pessoal, preencha *Responder só a estes números* para
 | Bot não responde no WhatsApp | WhatsApp desconectado ou chave do Groq errada. | Integrações do bot → **Testar conexão** em WhatsApp e IA. Se o WhatsApp caiu, **Gerar código de conexão** de novo (isso também religa o webhook). |
 | Bot não marca na agenda | Falta `configs/google_credentials.json` ou a agenda não foi compartilhada com a conta de serviço. | Integrações do bot → Google Agenda → **Testar conexão** diz qual. |
 | Atendimentos/Financeiro vazios ou com erro | `RUNTIME_ADMIN_TOKEN` vazio. | Preencha e `docker compose up -d`. |
-| Código do portal não chega | Número do bot não conectado e `PORTAL_SENDER_NUMBER` vazio. | Conecte o número ou preencha o reserva. |
-| Login do portal volta para a tela de código | Cookie seguro em http sem HTTPS *(não verificado)*. | Use o endereço do ngrok, ou `PORTAL_SECURE_COOKIES=false` só para teste local. |
+| "Este número ainda não tem acesso" | O número não foi convidado nem está em *WhatsApp com acesso*. | **Acessos → Convidar**. |
+| Código não chega no WhatsApp | Número oficial desconectado ou vazio, e o número do bot também. Ou o bot está no seu próprio celular: aí o código iria de você para você, e o sistema não manda. | **Acessos → Número oficial → Testar**. Use "Não chegou?" → e-mail ou Google. Para testar sem WhatsApp, `AUTH_LOG_CODES=true` mostra o código em `docker compose logs wizard` (nunca em produção). |
+| Depois de digitar o código, volta para a entrada | Cookie seguro em http sem HTTPS. | Use o endereço do ngrok, ou `PORTAL_SECURE_COOKIES=false` só para teste local. |
+| Botão do Google não aparece | `GOOGLE_OAUTH_CLIENT_ID` vazio. | Veja o `.env.example`, seção 5. |

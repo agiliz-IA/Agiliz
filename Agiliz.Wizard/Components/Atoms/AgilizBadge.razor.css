@@ -8,5 +8,5 @@
 }
 
 .badge-groq   { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
-.badge-claude { background: rgba(124,92,252,0.15); color: var(--accent); border: 1px solid rgba(124,92,252,0.3); }
+.badge-claude { background: var(--accent-soft); color: var(--lilac); border: 1px solid rgba(139,92,246,0.35); }
 .badge-flow   { background: rgba(16,185,129,0.15); color: var(--teal);   border: 1px solid rgba(16,185,129,0.3); }
