@@ -75,6 +75,14 @@ public static class TestFixtures
 
     /// <summary>Cria uma pasta temporária que é deletada ao fim do teste.</summary>
     public static TempDirectory CreateTempDir() => new();
+
+    /// <summary>Último código de acesso que o painel pediu ao Runtime para mandar (POST /api/admin/sender/notify).</summary>
+    public static string LastAccessCode(WireMock.Server.WireMockServer runtime)
+    {
+        var body = runtime.LogEntries.Last(e => e.RequestMessage.Path == "/api/admin/sender/notify").RequestMessage.Body!;
+        var text = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("text").GetString()!;
+        return System.Text.RegularExpressions.Regex.Match(text, @"\b\d{6}\b").Value;
+    }
 }
 
 public sealed class TempDirectory : IDisposable

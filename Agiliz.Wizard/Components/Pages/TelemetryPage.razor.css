@@ -8,8 +8,8 @@
 }
 
 .page-title {
-  font-family: var(--mono);
-  font-size: 16px;
+  font-family: var(--display);
+  font-size: 20px;
   font-weight: 600;
   color: var(--text);
 }
@@ -58,7 +58,7 @@
 }
 
 .bot-label {
-  color: var(--accent);
+  color: var(--lilac);
   font-family: var(--mono);
   font-size: 11px;
 }

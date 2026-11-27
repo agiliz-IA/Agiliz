@@ -171,6 +171,42 @@ public sealed class RuntimeApiClient(IHttpClientFactory httpFactory, ILogger<Run
     public Task<bool> ReplyAsync(string tenantId, string phone, string body, CancellationToken ct = default) =>
         PostOkAsync($"{TenantPath(tenantId)}/conversations/{Uri.EscapeDataString(phone)}/reply", new { body }, ct);
 
+    /// <summary>Mensagem de acesso (código, convite) pelo número oficial da Agiliz; o bot do cliente é a reserva.</summary>
+    public Task<bool> NotifyAsync(string phone, string text, string? tenantId = null, CancellationToken ct = default) =>
+        PostOkAsync("api/admin/sender/notify", new { phone, text, tenantId }, ct);
+
+    /// <summary>O número oficial está conectado?</summary>
+    public async Task<Agiliz.Core.Integrations.IntegrationTestResult> SenderStatusAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await CreateClient().GetAsync("api/admin/sender/status", ct);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<Agiliz.Core.Integrations.IntegrationTestResult>(JsonOpts, ct) ?? new(false, "Resposta vazia.")
+                : new(false, $"O servidor respondeu HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, "O servidor do bot (Runtime) não respondeu.");
+        }
+    }
+
+    /// <summary>Código de conexão do número oficial (WhatsApp → Aparelhos conectados).</summary>
+    public async Task<Agiliz.Core.Messaging.WhatsAppPairingResult> SenderPairingAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await CreateClient().PostAsync("api/admin/sender/pairing", null, ct);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadFromJsonAsync<Agiliz.Core.Messaging.WhatsAppPairingResult>(JsonOpts, ct) ?? new(false, null, "Resposta vazia.")
+                : new(false, null, $"O servidor respondeu HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, null, "O servidor do bot (Runtime) não respondeu.");
+        }
+    }
+
     public Task<bool> SendPortalCodeAsync(string tenantId, string phone, string code, CancellationToken ct = default) =>
         PostOkAsync($"{TenantPath(tenantId)}/portal-code", new { phone, code }, ct);
 

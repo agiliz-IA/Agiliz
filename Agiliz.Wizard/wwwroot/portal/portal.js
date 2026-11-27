@@ -108,82 +108,10 @@
     return el("div", { class: "brand" }, el("span", { class: "brand-mark", "aria-hidden": "true" }, "A"), "Agiliz");
   }
 
+  /** O login é na entrada única: sem sessão, vai para /entrar e volta para cá depois. */
   function showLogin() {
     stopPolling();
-    let phone = "";
-    const error = el("p", { class: "error", role: "alert" });
-    const card = el("div", { class: "login-card" });
-    app.replaceChildren(el("main", { class: "login" }, card));
-    stepPhone();
-
-    function stepPhone() {
-      const input = el("input", { class: "input", id: "phone", type: "tel", inputmode: "tel", autocomplete: "tel", placeholder: "(21) 99999-9999", required: true, value: phone });
-      const button = el("button", { class: "btn btn-primary btn-block", type: "submit" }, "Receber código no WhatsApp");
-      const form = el("form", {
-        onsubmit: async (e) => {
-          e.preventDefault();
-          phone = input.value.trim();
-          error.textContent = "";
-          setBusy(button, true, "Enviando...");
-          try {
-            await api("/login/start", { method: "POST", body: { phone } });
-            stepCode();
-          } catch (err) {
-            error.textContent = err.message;
-            setBusy(button, false, "Receber código no WhatsApp");
-          }
-        }
-      },
-        el("div", { class: "field" }, el("label", { for: "phone" }, "Seu WhatsApp"), input),
-        error,
-        button);
-      card.replaceChildren(brand(), el("h1", {}, "Portal do cliente"),
-        el("p", { class: "muted" }, "Acompanhe o atendimento do seu bot pelo celular ou pelo computador. Enviamos um código para o seu WhatsApp."),
-        form);
-      input.focus();
-    }
-
-    function stepCode() {
-      const input = el("input", { class: "input input-code", id: "code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6", pattern: "[0-9]{6}", required: true, placeholder: "••••••" });
-      const button = el("button", { class: "btn btn-primary btn-block", type: "submit" }, "Entrar");
-      const resend = el("button", { class: "btn-link", type: "button", disabled: true }, "Reenviar código (60 s)");
-      let seconds = 60;
-      const countdown = setInterval(() => {
-        seconds -= 1;
-        if (seconds <= 0) { clearInterval(countdown); resend.disabled = false; resend.textContent = "Reenviar código"; }
-        else resend.textContent = `Reenviar código (${seconds} s)`;
-      }, 1000);
-      resend.addEventListener("click", async () => {
-        try { await api("/login/start", { method: "POST", body: { phone } }); toast("Código reenviado."); clearInterval(countdown); stepCode(); }
-        catch (err) { error.textContent = err.message; }
-      });
-      const form = el("form", {
-        onsubmit: async (e) => {
-          e.preventDefault();
-          error.textContent = "";
-          setBusy(button, true, "Entrando...");
-          try {
-            await api("/login/verify", { method: "POST", body: { phone, code: input.value.trim() } });
-            clearInterval(countdown);
-            await start();
-          } catch (err) {
-            error.textContent = err.message;
-            setBusy(button, false, "Entrar");
-            input.select();
-          }
-        }
-      },
-        el("div", { class: "field" }, el("label", { for: "code" }, "Código de 6 dígitos"), input),
-        error,
-        button);
-      card.replaceChildren(brand(), el("h1", {}, "Digite o código"),
-        el("p", { class: "muted" }, "Se este número tiver acesso, o código chega no WhatsApp em instantes. Ele vale por 10 minutos."),
-        form,
-        el("div", { class: "row-between" },
-          el("button", { class: "btn-link", type: "button", onclick: () => { clearInterval(countdown); stepPhone(); } }, "Trocar número"),
-          resend));
-      input.focus();
-    }
+    location.assign("/entrar?volta=" + encodeURIComponent("/portal" + location.hash));
   }
 
   // ─── Estrutura ──────────────────────────────────────────────────────────
@@ -200,7 +128,8 @@
     if (!state.me.bots.length) {
       app.replaceChildren(el("main", { class: "login" }, el("div", { class: "login-card" }, brand(),
         el("h1", {}, "Nenhum bot liberado"),
-        el("p", { class: "muted" }, "Este número ainda não tem acesso a nenhum bot. Fale com a equipe Agiliz."),
+        el("p", { class: "muted" }, "Sua conta ainda não tem acesso a nenhum bot. Fale com a equipe Agiliz."),
+        state.me.staff ? el("a", { class: "btn btn-block", href: "/" }, "Ir para o painel") : null,
         el("button", { class: "btn btn-block", onclick: logout }, "Sair"))));
       return;
     }
@@ -216,8 +145,7 @@
   async function logout() {
     try { await api("/logout", { method: "POST" }); } catch { /* sessão já expirada */ }
     state.me = null;
-    location.hash = "";
-    showLogin();
+    location.assign("/entrar");
   }
 
   function shell(content) {
@@ -228,7 +156,10 @@
     const nav = el("nav", { class: "nav", "aria-label": "Seções" },
       el("div", { class: "nav-brand" }, brand()),
       routes.map(r => el("a", { href: r.hash, "aria-current": active === r.hash ? "page" : null }, icon(r.icon), el("span", {}, r.label))),
-      el("div", { class: "nav-footer" }, el("button", { class: "btn btn-small btn-block", onclick: logout }, "Sair")));
+      el("div", { class: "nav-footer" },
+        state.me.staff ? el("a", { class: "btn btn-small btn-block", href: "/" }, "Painel da equipe") : null,
+        el("a", { class: "btn btn-small btn-block", href: "/entrar/conta" }, "Minha conta"),
+        el("button", { class: "btn btn-small btn-block", onclick: logout }, "Sair")));
     if (routes.length === 3) nav.classList.add("nav-3");
 
     const switcher = state.me.bots.length > 1
@@ -246,7 +177,7 @@
       el("div", { class: "topbar-title" }, el("strong", {}, current.name), el("span", {}, current.isDemo ? "Demonstração" : "Portal do cliente")),
       status,
       switcher,
-      el("button", { class: "btn btn-small mobile-only", onclick: logout, "aria-label": "Sair" }, "Sair"));
+      el("a", { class: "btn btn-small mobile-only", href: "/entrar/conta" }, "Conta"));
 
     app.replaceChildren(el("div", { class: "shell" }, header, nav, el("main", { class: "main", id: "main" }, content)));
   }

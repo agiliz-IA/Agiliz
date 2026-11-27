@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@inject NavigationManager NavManager
+@implements IDisposable
 
 <div class="layout-wrapper">
     <!-- Navbar / Sidebar -->
@@ -6,8 +8,32 @@
 
     <!-- Main Content -->
     <main class="main-area">
-        @Body
+        @if (User.CanOpen(CurrentPath))
+        {
+            @Body
+        }
+        else
+        {
+            <div class="page-header">
+                <div>
+                    <div class="page-title">sem acesso</div>
+                    <div class="page-sub">Esta tela é só para Admin. Peça a um Admin se precisar dessas informações.</div>
+                </div>
+            </div>
+        }
     </main>
 </div>
 
 <div id="toasts"></div>
+
+@code {
+    [CascadingParameter] public Agiliz.Wizard.Accounts.PainelUser User { get; set; } = new(null);
+
+    private string CurrentPath => new Uri(NavManager.Uri).AbsolutePath.Trim('/');
+
+    protected override void OnInitialized() => NavManager.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => NavManager.LocationChanged -= OnLocationChanged;
+}

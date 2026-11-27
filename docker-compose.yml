@@ -110,6 +110,19 @@ services:
       Billing__UsdToBrl: ${BILLING_USD_TO_BRL:-}
       # Portal do cliente (/portal): em produção fica atrás de HTTPS; o cookie da sessão só vai por HTTPS.
       Portal__SecureCookies: ${PORTAL_SECURE_COOKIES:-true}
+      # Entrada única (/entrar): códigos por e-mail usam o mesmo SMTP do runtime
+      SMTP_HOST:                 ${SMTP_HOST:-}
+      SMTP_PORT:                 ${SMTP_PORT:-587}
+      SMTP_USER:                 ${SMTP_USER:-}
+      SMTP_PASS:                 ${SMTP_PASS:-}
+      SMTP_FROM:                 ${SMTP_FROM:-}
+      # "Continuar com Google": ID do cliente OAuth (Google Cloud). Vazio = botão escondido.
+      Auth__Google__ClientId:     ${GOOGLE_OAUTH_CLIENT_ID:-}
+      Auth__Google__ClientSecret: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Endereço público (https://app.agiliz.ia.br): usado no retorno do Google e nos links de convite
+      Auth__PublicUrl:           ${AGILIZ_PUBLIC_URL:-}
+      # Só para testar sem WhatsApp/e-mail: escreve o código de acesso no log. Nunca ligue em produção.
+      Auth__LogCodes:            ${AUTH_LOG_CODES:-false}
       Billing__FixedMonthlyBrl__whatsapp: ${BILLING_FIXED_WHATSAPP_BRL:-}
     restart: unless-stopped
     depends_on:

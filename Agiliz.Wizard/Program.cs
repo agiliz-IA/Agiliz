@@ -4,6 +4,7 @@ using Agiliz.Core.LLM;
 using Agiliz.Core.Models;
 using Agiliz.Wizard.Services;
 using Agiliz.Wizard.Portal;
+using Agiliz.Wizard.Accounts;
 using Microsoft.AspNetCore.DataProtection;
 using System.Threading.RateLimiting;
 
@@ -28,6 +29,13 @@ builder.Services.AddDataProtection()
     .SetApplicationName("Agiliz.Wizard")
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(configsDir, "keys")));
 builder.Services.AddSingleton<PortalAuthService>();
+// Entrada única (/entrar): contas com várias formas de entrar (WhatsApp, e-mail, Google), convites e sessão.
+builder.Services.AddSingleton(new AccountStore(configsDir));
+builder.Services.AddSingleton<Agiliz.Core.Tools.SmtpEmailSender>();
+builder.Services.AddSingleton<AuthService>();
+builder.Services.AddSingleton<GoogleSignIn>();
+builder.Services.AddSingleton<AccessService>();
+builder.Services.AddHttpClient(GoogleSignIn.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
 // Enums como texto nas respostas (o portal compara "Scheduling", não 1).
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
@@ -61,20 +69,49 @@ if (app.Environment.IsDevelopment())
 
 app.Use(async (context, next) =>
 {
-    // Portal do cliente: login próprio (código no WhatsApp). Nunca passa pelo Basic Auth do admin
-    // e é uma página estática + API, sem circuito Blazor (que daria acesso às telas do admin).
-    if (context.Request.Path.StartsWithSegments("/portal"))
+    // Entrada (/entrar) e portal do cliente (/portal): sessão própria (cookie da entrada única), nunca o Basic Auth.
+    // São páginas estáticas + API, sem circuito Blazor (que daria acesso às telas do admin).
+    if (context.Request.Path.StartsWithSegments("/portal") || context.Request.Path.StartsWithSegments("/entrar"))
     {
         var headers = context.Response.Headers;
         headers["X-Frame-Options"] = "DENY";
         headers["X-Content-Type-Options"] = "nosniff";
         headers["Referrer-Policy"] = "same-origin";
         headers["Content-Security-Policy"] =
-            "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+            "default-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
         await next();
         return;
     }
 
+    // Painel: funcionário logado na entrada única.
+    var auth = context.RequestServices.GetRequiredService<AuthService>();
+    var account = auth.ReadSession(context.Request.Cookies[AuthService.CookieName]);
+    if (account?.IsStaff == true)
+    {
+        context.Items[PainelAccess.AccountKey] = account.Id;
+        await next();
+        return;
+    }
+
+    var accounts = context.RequestServices.GetRequiredService<AccountStore>();
+    if (accounts.AnyAdmin())
+    {
+        // Já existe Admin: o painel só abre pela tela de entrada.
+        var isPage = HttpMethods.IsGet(context.Request.Method) && context.Request.Headers.Accept.ToString().Contains("text/html");
+        if (isPage)
+        {
+            var back = context.Request.Path + context.Request.QueryString;
+            context.Response.Redirect("/entrar?volta=" + Uri.EscapeDataString(back));
+        }
+        else
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        }
+        return;
+    }
+
+    // Ninguém virou Admin ainda: vale a senha de emergência (Wizard:AdminPassword), como antes.
+    // Com ela, abra "Acessos" e convide a si mesmo como Admin.
     var expectedPassword = app.Configuration["Wizard:AdminPassword"];
     if (string.IsNullOrWhiteSpace(expectedPassword))
     {
@@ -83,12 +120,12 @@ app.Use(async (context, next) =>
     }
 
     var expectedUser = app.Configuration["Wizard:AdminUser"] ?? "admin";
-    var auth = context.Request.Headers.Authorization.ToString();
-    if (auth.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+    var authorization = context.Request.Headers.Authorization.ToString();
+    if (authorization.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
     {
         try
         {
-            var raw = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(auth["Basic ".Length..]));
+            var raw = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(authorization["Basic ".Length..]));
             var parts = raw.Split(':', 2);
             if (parts.Length == 2 && parts[0] == expectedUser && parts[1] == expectedPassword)
             {
@@ -96,7 +133,7 @@ app.Use(async (context, next) =>
                 return;
             }
         }
-        catch { }
+        catch (FormatException) { }
     }
 
     context.Response.Headers.WWWAuthenticate = "Basic realm=\"Agiliz Wizard\"";
@@ -117,6 +154,7 @@ app.UseAntiforgery();
 // /portal e /portal/ são a mesma rota para o roteamento; a página usa caminhos absolutos.
 app.MapGet("/portal", () => Results.File(Path.Combine(app.Environment.WebRootPath, "portal", "index.html"), "text/html; charset=utf-8"));
 PortalEndpoints.Map(app);
+AuthEndpoints.Map(app);
 
 // ─── Session purge timer ──────────────────────────────────────────────────────
 var store = app.Services.GetRequiredService<WizardSessionStore>();

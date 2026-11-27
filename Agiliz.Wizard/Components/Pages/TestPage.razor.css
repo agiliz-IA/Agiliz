@@ -62,7 +62,7 @@
   outline: none;
   height: 48px;
 }
-.chat-textarea:focus { border-color: var(--accent); }
+.chat-textarea:focus { border-color: var(--lilac); }
 
 .chat-row { display: flex; flex-direction: column; width: 100%; }
 .user-row { align-items: flex-end; }

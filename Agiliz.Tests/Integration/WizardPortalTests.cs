@@ -38,7 +38,7 @@ public sealed class WizardPortalTests : IDisposable
         BotConfigLoader.Save(_dir.Path, TestFixtures.DefaultConfig(tenantId: "demo", whatsappNumber: "5521900000022") with { IsDemo = true, PortalPhones = [Phone] });
 
         _runtime.Given(Request.Create().WithPath("/api/admin/reload").UsingPost()).RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { }));
-        _runtime.Given(Request.Create().WithPath("/api/admin/tenants/*/portal-code").UsingPost()).RespondWith(Response.Create().WithStatusCode(204));
+        _runtime.Given(Request.Create().WithPath("/api/admin/sender/notify").UsingPost()).RespondWith(Response.Create().WithStatusCode(204));
         _runtime.Given(Request.Create().WithPath("/api/admin/usage").UsingGet())
                 .RespondWith(Response.Create().WithStatusCode(200).WithBodyAsJson(new { month = "2026-11", tenants = new[] { new { tenantId = "clinica", contacts = 130, messages = 400 } } }));
         foreach (var tenant in new[] { "clinica", "demo" })
@@ -73,18 +73,16 @@ public sealed class WizardPortalTests : IDisposable
         return request;
     }
 
-    private string LastCode() =>
-        JsonDocument.Parse(_runtime.LogEntries.Last(e => e.RequestMessage.Path.EndsWith("/portal-code")).RequestMessage.Body!)
-            .RootElement.GetProperty("code").GetString()!;
+    private string LastCode() => TestFixtures.LastAccessCode(_runtime);
 
-    /// <summary>Faz o login completo; o cookie fica no HttpClient.</summary>
+    /// <summary>Faz o login completo pela entrada única (/entrar); o cookie fica no HttpClient.</summary>
     private async Task<HttpClient> LoggedInAsync(WebApplicationFactory<Agiliz.Wizard.Program> factory)
     {
         var client = factory.CreateClient();
-        (await client.PostAsJsonAsync("/portal/api/login/start", new { phone = "(21) 91111-2222" })).EnsureSuccessStatusCode();
-        var verify = await client.PostAsJsonAsync("/portal/api/login/verify", new { phone = "21911112222", code = LastCode() });
-        verify.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        verify.Headers.GetValues("Set-Cookie").Single().Should().Contain("httponly").And.Contain("samesite=strict").And.Contain("path=/portal");
+        (await client.SendAsync(Post("/entrar/api/start", new { identifier = "(21) 91111-2222" }))).EnsureSuccessStatusCode();
+        var verify = await client.SendAsync(Post("/entrar/api/verify", new { identifier = "21911112222", code = LastCode() }));
+        verify.StatusCode.Should().Be(HttpStatusCode.OK);
+        verify.Headers.GetValues("Set-Cookie").Single().Should().Contain("httponly").And.Contain("samesite=lax").And.Contain("path=/");
         return client;
     }
 
@@ -120,19 +118,20 @@ public sealed class WizardPortalTests : IDisposable
         var me = await client.GetFromJsonAsync<JsonElement>("/portal/api/me");
 
         me.GetProperty("bots").EnumerateArray().Select(b => b.GetProperty("tenantId").GetString()).Should().BeEquivalentTo("clinica", "demo");
-        _runtime.LogEntries.Single(e => e.RequestMessage.Path.EndsWith("/portal-code")).RequestMessage.Path
-            .Should().Be("/api/admin/tenants/clinica/portal-code", "o código sai do número de um bot do próprio cliente");
+        var sent = JsonDocument.Parse(_runtime.LogEntries.Single(e => e.RequestMessage.Path == "/api/admin/sender/notify").RequestMessage.Body!).RootElement;
+        sent.GetProperty("tenantId").GetString().Should().Be("clinica", "sem o número oficial, o código sai do número de um bot do próprio cliente");
     }
 
     [Fact]
-    public async Task Login_UnknownPhone_GetsSameAnswerAndNoCode()
+    public async Task Login_UnknownPhone_SaysSoAndSendsNoCode()
     {
         using var factory = BuildFactory();
 
-        var response = await factory.CreateClient().PostAsJsonAsync("/portal/api/login/start", new { phone = "21900001111" });
+        var response = await factory.CreateClient().SendAsync(Post("/entrar/api/start", new { identifier = "21900001111" }));
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        _runtime.LogEntries.Should().NotContain(e => e.RequestMessage.Path.EndsWith("/portal-code"));
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound, "a tela diz que o número não tem acesso, em vez de fingir que mandou");
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("sem-acesso");
+        _runtime.LogEntries.Should().NotContain(e => e.RequestMessage.Path == "/api/admin/sender/notify");
     }
 
     [Fact]
@@ -140,14 +139,14 @@ public sealed class WizardPortalTests : IDisposable
     {
         using var factory = BuildFactory();
         var client = factory.CreateClient();
-        await client.PostAsJsonAsync("/portal/api/login/start", new { phone = Phone });
+        await client.SendAsync(Post("/entrar/api/start", new { identifier = Phone }));
         var code = LastCode();
         var wrong = code == "000000" ? "111111" : "000000";
 
-        for (var i = 0; i < PortalAuthService.MaxAttempts; i++)
-            (await client.PostAsJsonAsync("/portal/api/login/verify", new { phone = Phone, code = wrong })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        for (var i = 0; i < Agiliz.Wizard.Accounts.AuthService.MaxAttempts; i++)
+            (await client.SendAsync(Post("/entrar/api/verify", new { identifier = Phone, code = wrong }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        (await client.PostAsJsonAsync("/portal/api/login/verify", new { phone = Phone, code })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.SendAsync(Post("/entrar/api/verify", new { identifier = Phone, code }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -156,9 +155,9 @@ public sealed class WizardPortalTests : IDisposable
         using var factory = BuildFactory(loginLimit: 2);
         var client = factory.CreateClient();
 
-        await client.PostAsJsonAsync("/portal/api/login/start", new { phone = "21900001111" });
-        await client.PostAsJsonAsync("/portal/api/login/start", new { phone = "21900001112" });
-        var third = await client.PostAsJsonAsync("/portal/api/login/start", new { phone = "21900001113" });
+        await client.SendAsync(Post("/entrar/api/start", new { identifier = "21900001111" }));
+        await client.SendAsync(Post("/entrar/api/start", new { identifier = "21900001112" }));
+        var third = await client.SendAsync(Post("/entrar/api/start", new { identifier = "21900001113" }));
 
         third.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
     }

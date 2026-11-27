@@ -2,8 +2,13 @@
 
 <aside class="sidebar">
     <div class="sidebar-logo">
-        <div class="sidebar-logo-text">AGILIZ</div>
-        <div class="sidebar-logo-sub">bot manager</div>
+        <div class="sidebar-logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"></path></svg>
+        </div>
+        <div>
+            <div class="sidebar-logo-text">agiliz<span>.ia</span></div>
+            <div class="sidebar-logo-sub">painel da equipe</div>
+        </div>
     </div>
     
     <nav class="sidebar-nav">
@@ -15,12 +20,15 @@
             Dashboard
         </button>
 
+        @if (User.IsAdmin)
+        {
         <button class="nav-item @(IsActive("telemetry") ? "active" : "")" @onclick='() => NavigateTo("telemetry")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 14h12M4 14V8m4 6V4m4 10v-6"></path>
             </svg>
             Telemetria
         </button>
+        }
 
         <button class="nav-item @(IsActive("handoff") ? "active" : "")" @onclick='() => NavigateTo("handoff")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -59,6 +67,8 @@
             Propostas
         </button>
 
+        @if (User.IsAdmin)
+        {
         <button class="nav-item @(IsActive("billing") ? "active" : "")" @onclick='() => NavigateTo("billing")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="2" y="3" width="12" height="10" rx="2" ry="2"></rect>
@@ -67,12 +77,20 @@
             </svg>
             Financeiro
         </button>
+        }
 
         <button class="nav-item @(IsActive("email") ? "active" : "")" @onclick='() => NavigateTo("email")'>
             <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M2 4l6 4 6-4M2 4v8h12V4H2z"></path>
             </svg>
             Disparar E-mail
+        </button>
+
+        <button class="nav-item @(IsActive("acessos") ? "active" : "")" @onclick='() => NavigateTo("acessos")'>
+            <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="6" cy="5.5" r="2.5"></circle><path d="M1.5 14c.6-2.6 2.3-4 4.5-4s3.9 1.4 4.5 4"></path><path d="M12.5 5.5v4M10.5 7.5h4"></path>
+            </svg>
+            Acessos
         </button>
 
         <button class="nav-item @(IsActive("create") || IsActive("edit") ? "active" : "")" @onclick='() => NavigateTo("create")'>
@@ -84,13 +102,30 @@
     </nav>
 
     <div class="sidebar-footer">
-        v1.0 · Blazor
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar" aria-hidden="true">@Initial</div>
+            <div class="sidebar-user-text">
+                <div class="sidebar-user-name">@User.Name</div>
+                <div class="sidebar-user-role">@User.RoleLabel</div>
+            </div>
+        </div>
+        @if (User.Account is not null)
+        {
+            <div class="sidebar-user-links">
+                <a href="/entrar/conta" target="_top">Minha conta</a>
+                <a href="/entrar/sair" target="_top">Sair</a>
+            </div>
+        }
     </div>
 </aside>
 
 @implements IDisposable
 
 @code {
+    [CascadingParameter] public Agiliz.Wizard.Accounts.PainelUser User { get; set; } = new(null);
+
+    private string Initial => string.IsNullOrWhiteSpace(User.Name) ? "?" : User.Name.Trim()[..1].ToUpperInvariant();
+
     protected override void OnInitialized()
     {
         NavManager.LocationChanged += OnLocationChanged;
